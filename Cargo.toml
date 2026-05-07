@@ -9,9 +9,11 @@ links = "tauri-plugin-fs-resolver"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 
 [dependencies]
+fs-resolver = { path = "./crates/fs-resolver" }
 tauri = { version = "2.9.3" }
-serde = { version = "1.0.228", features = ["derive"] }
-thiserror = "2.0.17"
 
 [build-dependencies]
 tauri-plugin = { version = "2.5.1", features = ["build"] }
+
+[workspace]
+members = ["./crates/fs-resolver"]
