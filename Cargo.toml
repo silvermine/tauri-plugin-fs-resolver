@@ -1,0 +1,17 @@
+[package]
+name = "tauri-plugin-fs-resolver"
+version = "0.1.0"
+description = "A Tauri plugin for resolving platform-specific file paths"
+license = "MIT"
+edition = "2024"
+rust-version = "1.89.0"
+links = "tauri-plugin-fs-resolver"
+exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+
+[dependencies]
+tauri = { version = "2.9.3" }
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.17"
+
+[build-dependencies]
+tauri-plugin = { version = "2.5.1", features = ["build"] }
