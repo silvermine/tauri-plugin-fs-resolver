@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-resolve-android-path-collection"
+description = "Enables the resolve_android_path_collection command without any pre-configured scope."
+commands.allow = ["resolve_android_path_collection"]
+
+[[permission]]
+identifier = "deny-resolve-android-path-collection"
+description = "Denies the resolve_android_path_collection command without any pre-configured scope."
+commands.deny = ["resolve_android_path_collection"]
