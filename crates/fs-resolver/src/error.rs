@@ -4,25 +4,36 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
+   #[error("Initialization error: {0}")]
+   Initialization(String),
+
    #[error("Invalid path: {0}")]
    InvalidPath(String),
+
+   #[error("Path mapping undefined for OS: {0}")]
+   PathMappingUndefined(String),
 
    #[error("Unsupported platform: {0}")]
    UnsupportedPlatform(String),
 
-   #[error("Incorrect OS: current OS is {0}, invoked for {1}")]
-   IncorrectOS(String, String),
+   #[error("Incorrect OS for path {path}: current OS is {current_os}, invoked for {expected_os}")]
+   IncorrectOS {
+      path: String,
+      current_os: String,
+      expected_os: String,
+   },
 
    #[error("Not implemented: {0}")]
    NotImplemented(String),
-}
 
-pub(crate) fn check_os(expected: &[&str], actual: &str) -> Result<()> {
-   if !expected.contains(&actual) {
-      return Err(Error::IncorrectOS(actual.to_string(), expected.join(", ")));
-   }
+   #[error("JSON serialization error: {0}")]
+   JsonSerialization(String),
 
-   Ok(())
+   #[error("Android path resolution not configured")]
+   AndroidPathResolutionNotConfigured,
+
+   #[error("Plugin invocation error: {0}")]
+   PluginInvocation(String),
 }
 
 /// Serialize errors as plain strings for the Tauri IPC bridge.

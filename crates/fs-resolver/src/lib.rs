@@ -1,5 +1,4 @@
 mod android_paths;
-mod android_resolve;
 mod error;
 mod ios_paths;
 mod ios_resolve;
@@ -13,7 +12,7 @@ mod windows_paths;
 mod windows_resolve;
 
 pub use android_paths::{AndroidPath, AndroidPathCollection};
-pub use error::*;
+pub use error::{Error, Result};
 pub use ios_paths::IosPath;
 pub use linux_paths::LinuxPath;
 pub use mac_paths::MacPath;
