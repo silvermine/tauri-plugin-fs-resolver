@@ -374,6 +374,32 @@ let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Document
 Check out the [examples/tauri-app](examples/tauri-app) directory for a working example of
 how to use this plugin.
 
+To run the example app:
+
+```bash
+# Desktop
+npm run example:dev
+
+# iOS
+npm run example:init:ios   # first time only
+npm run example:dev:ios
+
+# Android
+npm run example:init:android   # first time only
+npm run example:dev:android
+```
+
+#### iOS Setup
+
+Before running on iOS, you must set your Apple Development Team ID in
+`examples/tauri-app/src-tauri/gen/apple/tauri-app.xcodeproj/project.pbxproj`.
+The best way to do this is to open this file in Xcode and set the Team in `Signing &
+Capabilities`.
+
+When deploying to a physical iOS device, you may also need to trust the developer
+certificate on the device: go to **Settings > General > VPN & Device Management**,
+select your developer profile, and tap **Trust**.
+
 ## Development Standards
 
 This project follows the
