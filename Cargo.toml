@@ -16,4 +16,4 @@ tauri = { version = "2.9.3" }
 tauri-plugin = { version = "2.5.1", features = ["build"] }
 
 [workspace]
-members = ["./crates/fs-resolver"]
+members = ["./crates/fs-resolver", "./examples/tauri-app/src-tauri"]
