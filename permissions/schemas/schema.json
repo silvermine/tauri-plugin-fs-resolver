@@ -365,6 +365,12 @@
           "type": "string",
           "const": "deny-resolve-windows-path",
           "markdownDescription": "Denies the resolve_windows_path command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-windows-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-windows-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`"
         }
       ]
     }

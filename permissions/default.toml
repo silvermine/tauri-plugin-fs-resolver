@@ -1,0 +1,10 @@
+[default]
+description = "Default permissions for fs-resolver plugin (all resolve commands)"
+permissions = [
+    "allow-resolve-mac-path",
+    "allow-resolve-ios-path",
+    "allow-resolve-linux-path",
+    "allow-resolve-windows-path",
+    "allow-resolve-android-path",
+    "allow-resolve-android-path-collection",
+]
