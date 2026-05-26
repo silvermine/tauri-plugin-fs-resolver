@@ -1,6 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { platform } from '@tauri-apps/plugin-os';
-import { AndroidPath, AndroidPathCollection, MacPath, IosPath, WindowsPath, LinuxPath } from './types';
+import {
+   AndroidPath,
+   AndroidPathCollection,
+   MacPath,
+   IosPath,
+   WindowsPath,
+   LinuxPath,
+   WindowsApplicationDataPath,
+   Win32Path,
+} from './types';
 
 /**
  * Resolves a path on the Android platform.
@@ -104,3 +113,5 @@ export async function resolveWindowsPath(path: WindowsPath): Promise<string> {
 
    return await invoke<string>('plugin:fs-resolver|resolve_windows_path', { path });
 }
+
+export { AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath, WindowsPath };
