@@ -369,10 +369,57 @@ let app_data = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::RoamingAp
 let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Documents))?;
 ```
 
+### Implementation
+
+| Platform | Resolution strategy |
+|----------|---------------------|
+| macOS    | Native calls via `objc2-foundation` |
+| iOS      | Native calls via `objc2-foundation` |
+| Linux    | Rust `std::env` and XDG conventions |
+| Windows  | Rust `std::env` and `Known Folder` APIs |
+| Android  | JNI bridge to Kotlin via Tauri `PluginHandle` |
+
+On all platforms except Android, paths are resolved directly in Rust
+using native bindings or standard library APIs. No Tauri dependency is
+required at the resolver level for these platforms.
+
+Android requires crossing the JNI boundary to call `Context` methods
+(e.g. `getFilesDir()`, `getExternalCacheDirs()`) that are only
+available in the Kotlin runtime. At plugin initialization, the Tauri
+`PluginHandle` is captured in closures and injected into the
+`PathResolver`, keeping the public API free of Tauri types on all
+platforms.
+
 ### Examples
 
 Check out the [examples/tauri-app](examples/tauri-app) directory for a working example of
 how to use this plugin.
+
+To run the example app:
+
+```bash
+# Desktop
+npm run example:dev
+
+# iOS
+npm run example:init:ios   # first time only
+npm run example:dev:ios
+
+# Android
+npm run example:init:android   # first time only
+npm run example:dev:android
+```
+
+#### iOS Setup
+
+Before running on iOS, you must set your Apple Development Team ID in
+`examples/tauri-app/src-tauri/gen/apple/tauri-app.xcodeproj/project.pbxproj`.
+The best way to do this is to open this file in Xcode and set the Team in `Signing &
+Capabilities`.
+
+When deploying to a physical iOS device, you may also need to trust the developer
+certificate on the device: go to **Settings > General > VPN & Device Management**,
+select your developer profile, and tap **Trust**.
 
 ## Development Standards
 

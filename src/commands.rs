@@ -3,58 +3,52 @@ use fs_resolver::{
    WindowsPath,
 };
 use std::path::PathBuf;
-use std::sync::LazyLock;
-use tauri::{AppHandle, Runtime};
-
-static RESOLVER: LazyLock<PathResolver> = LazyLock::new(PathResolver::new);
-fn get_resolver() -> &'static PathResolver {
-   &RESOLVER
-}
+use tauri::State;
 
 #[tauri::command]
-pub(crate) async fn resolve_android_path<R: Runtime>(
-   _app: AppHandle<R>,
+pub(crate) async fn resolve_android_path(
+   resolver: State<'_, PathResolver>,
    path: AndroidPath,
 ) -> Result<PathBuf> {
-   get_resolver().resolve_android(&path)
+   resolver.resolve_android(&path)
 }
 
 #[tauri::command]
-pub(crate) async fn resolve_android_path_collection<R: Runtime>(
-   _app: AppHandle<R>,
-   path: AndroidPathCollection,
+pub(crate) async fn resolve_android_path_collection(
+   resolver: State<'_, PathResolver>,
+   collection: AndroidPathCollection,
 ) -> Result<Vec<PathBuf>> {
-   get_resolver().resolve_android_path_collection(&path)
+   resolver.resolve_android_path_collection(&collection)
 }
 
 #[tauri::command]
-pub(crate) async fn resolve_ios_path<R: Runtime>(
-   _app: AppHandle<R>,
+pub(crate) async fn resolve_ios_path(
+   resolver: State<'_, PathResolver>,
    path: IosPath,
 ) -> Result<PathBuf> {
-   get_resolver().resolve_ios(&path)
+   resolver.resolve_ios(&path)
 }
 
 #[tauri::command]
-pub(crate) async fn resolve_linux_path<R: Runtime>(
-   _app: AppHandle<R>,
+pub(crate) async fn resolve_linux_path(
+   resolver: State<'_, PathResolver>,
    path: LinuxPath,
 ) -> Result<PathBuf> {
-   get_resolver().resolve_linux(&path)
+   resolver.resolve_linux(&path)
 }
 
 #[tauri::command]
-pub(crate) async fn resolve_mac_path<R: Runtime>(
-   _app: AppHandle<R>,
+pub(crate) async fn resolve_mac_path(
+   resolver: State<'_, PathResolver>,
    path: MacPath,
 ) -> Result<PathBuf> {
-   get_resolver().resolve_mac(&path)
+   resolver.resolve_mac(&path)
 }
 
 #[tauri::command]
-pub(crate) async fn resolve_windows_path<R: Runtime>(
-   _app: AppHandle<R>,
+pub(crate) async fn resolve_windows_path(
+   resolver: State<'_, PathResolver>,
    path: WindowsPath,
 ) -> Result<PathBuf> {
-   get_resolver().resolve_windows(&path)
+   resolver.resolve_windows(&path)
 }

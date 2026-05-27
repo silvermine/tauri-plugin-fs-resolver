@@ -1,3 +1,16 @@
+## Default Permission
+
+Default permissions for fs-resolver plugin (all resolve commands)
+
+#### This default permission set includes the following:
+
+- `allow-resolve-mac-path`
+- `allow-resolve-ios-path`
+- `allow-resolve-linux-path`
+- `allow-resolve-windows-path`
+- `allow-resolve-android-path`
+- `allow-resolve-android-path-collection`
+
 ## Permission Table
 
 <table>

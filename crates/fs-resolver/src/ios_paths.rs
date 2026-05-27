@@ -1,6 +1,5 @@
-use std::fmt::Display;
-
 use serde::Deserialize;
+use std::fmt::Display;
 
 // Directories that resolve to usable paths within the iOS app sandbox.
 //

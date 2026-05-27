@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+*.log
+
+# Rust
+src-tauri/target/
+src-tauri/gen/schemas
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gen
+src-tauri/gen/

@@ -1,8 +1,8 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 // https://developer.android.com/reference/android/content/Context
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum AndroidPath {
    // App-private data directory. Cleared on uninstall.
@@ -120,7 +120,7 @@ impl Display for AndroidPath {
 
 // These map to methods that provide a collection of paths, rather than a single path.
 // https://developer.android.com/reference/android/content/Context
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum AndroidPathCollection {
    // External cache directories across all storage volumes.
