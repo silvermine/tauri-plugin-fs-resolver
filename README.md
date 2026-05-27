@@ -369,6 +369,27 @@ let app_data = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::RoamingAp
 let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Documents))?;
 ```
 
+### Implementation
+
+| Platform | Resolution strategy |
+|----------|---------------------|
+| macOS    | Native calls via `objc2-foundation` |
+| iOS      | Native calls via `objc2-foundation` |
+| Linux    | Rust `std::env` and XDG conventions |
+| Windows  | Rust `std::env` and `Known Folder` APIs |
+| Android  | JNI bridge to Kotlin via Tauri `PluginHandle` |
+
+On all platforms except Android, paths are resolved directly in Rust
+using native bindings or standard library APIs. No Tauri dependency is
+required at the resolver level for these platforms.
+
+Android requires crossing the JNI boundary to call `Context` methods
+(e.g. `getFilesDir()`, `getExternalCacheDirs()`) that are only
+available in the Kotlin runtime. At plugin initialization, the Tauri
+`PluginHandle` is captured in closures and injected into the
+`PathResolver`, keeping the public API free of Tauri types on all
+platforms.
+
 ### Examples
 
 Check out the [examples/tauri-app](examples/tauri-app) directory for a working example of
