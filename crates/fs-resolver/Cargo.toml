@@ -9,3 +9,21 @@ thiserror = "2.0.17"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 objc2-foundation = "0.3.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# getpwuid_r for home directory fallback when $HOME is unset.
+libc = "0.2.186"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Raw Win32 FFI bindings for SHGetKnownFolderPath (resolves KNOWNFOLDERID paths for MSI-packaged apps).
+# - Win32_UI_Shell: SHGetKnownFolderPath + FOLDERID_* GUID constants
+# - Win32_Foundation: HRESULT / S_OK
+# - Win32_System_Com: CoTaskMemFree (required to release SHGetKnownFolderPath output)
+# - Win32_Globalization: lstrlenW (measures null-terminated wide string length)
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_Foundation", "Win32_System_Com", "Win32_Globalization"] }
+
+# WinRT bindings for Windows.Storage.ApplicationData (resolves sandboxed paths for MSIX-packaged apps).
+# - Storage: ApplicationData, StorageFolder, IStorageItem (Path())
+# - Storage_Search: Required because StorageFolder implements IStorageFolderQueryOperations,
+#   and the crate gates methods returning StorageFolder behind this feature.
+windows = { version = "0.62.2", features = ["Storage", "Storage_Search"] }

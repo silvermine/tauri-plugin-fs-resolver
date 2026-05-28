@@ -200,11 +200,11 @@ mod tests {
          }
       );
 
-      let linux_result = android_resolver.resolve_linux(&LinuxPath::UserHomeDirectory);
+      let linux_result = android_resolver.resolve_linux(&LinuxPath::DataHome);
       assert_eq!(
          linux_result.unwrap_err(),
          Error::IncorrectOS {
-            path: LinuxPath::UserHomeDirectory.to_string(),
+            path: LinuxPath::DataHome.to_string(),
             current_os: android_string.to_string(),
             expected_os: "linux".to_string(),
          }
@@ -258,11 +258,11 @@ mod tests {
       let ios_result = ios_resolver.resolve_ios(&IosPath::DocumentDirectory);
       assert_eq!(ios_result.unwrap(), PathBuf::from("ios/documentDirectory"));
 
-      let linux_result = ios_resolver.resolve_linux(&LinuxPath::UserHomeDirectory);
+      let linux_result = ios_resolver.resolve_linux(&LinuxPath::DataHome);
       assert_eq!(
          linux_result.unwrap_err(),
          Error::IncorrectOS {
-            path: LinuxPath::UserHomeDirectory.to_string(),
+            path: LinuxPath::DataHome.to_string(),
             current_os: ios_string.to_string(),
             expected_os: "linux".to_string(),
          }
@@ -323,11 +323,8 @@ mod tests {
          }
       );
 
-      let linux_result = linux_resolver.resolve_linux(&LinuxPath::UserHomeDirectory);
-      assert_eq!(
-         linux_result.unwrap(),
-         PathBuf::from("linux/userHomeDirectory")
-      );
+      let linux_result = linux_resolver.resolve_linux(&LinuxPath::DataHome);
+      assert_eq!(linux_result.unwrap(), PathBuf::from("linux/dataHome"));
 
       let mac_result = linux_resolver.resolve_mac(&MacPath::ApplicationDirectory);
       assert_eq!(
@@ -384,11 +381,11 @@ mod tests {
          }
       );
 
-      let linux_result = macos_resolver.resolve_linux(&LinuxPath::UserHomeDirectory);
+      let linux_result = macos_resolver.resolve_linux(&LinuxPath::DataHome);
       assert_eq!(
          linux_result.unwrap_err(),
          Error::IncorrectOS {
-            path: LinuxPath::UserHomeDirectory.to_string(),
+            path: LinuxPath::DataHome.to_string(),
             current_os: macos_string.to_string(),
             expected_os: "linux".to_string(),
          }
@@ -445,11 +442,11 @@ mod tests {
          }
       );
 
-      let linux_result = windows_resolver.resolve_linux(&LinuxPath::UserHomeDirectory);
+      let linux_result = windows_resolver.resolve_linux(&LinuxPath::DataHome);
       assert_eq!(
          linux_result.unwrap_err(),
          Error::IncorrectOS {
-            path: LinuxPath::UserHomeDirectory.to_string(),
+            path: LinuxPath::DataHome.to_string(),
             current_os: windows_string.to_string(),
             expected_os: "linux".to_string(),
          }
@@ -478,7 +475,7 @@ mod tests {
       let path_mapping = PathMapping {
          android: Some(AndroidPath::DataDir),
          ios: Some(IosPath::DocumentDirectory),
-         linux: Some(LinuxPath::UserHomeDirectory),
+         linux: Some(LinuxPath::DataHome),
          macos: Some(MacPath::ApplicationDirectory),
          windows: Some(WindowsPath::Win32(Win32Path::LocalAppData)),
       };
@@ -504,7 +501,7 @@ mod tests {
          } else if os == "linux" {
             assert_eq!(
                resolved,
-               PathBuf::from("linux/userHomeDirectory"),
+               PathBuf::from("linux/dataHome"),
                "Incorrect path for linux with os {}",
                os
             );

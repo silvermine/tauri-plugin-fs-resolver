@@ -36,7 +36,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
       const pathMapping = new PathMapping({
          android: AndroidPath.DataDir,
          ios: IosPath.CachesDirectory,
-         linux: LinuxPath.UserHomeDirectory,
+         linux: LinuxPath.DataHome,
          macos: MacPath.CachesDirectory,
          windows: { win32: Win32Path.LocalAppData },
       });

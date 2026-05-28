@@ -34,6 +34,23 @@ pub enum Error {
 
    #[error("Plugin invocation error: {0}")]
    PluginInvocation(String),
+
+   #[error("Linux environment missing: ${variable} is not set (resolving {path}). {hint}")]
+   LinuxEnvironmentMissing {
+      variable: String,
+      path: String,
+      hint: String,
+   },
+
+   #[error(
+      "Win32 path invoked from MSIX packaged context; make sure to use the WindowsPath::WindowsApplicationDataPath variant instead"
+   )]
+   Win32PathInvokedFromMsixPackagedContext,
+
+   #[error(
+      "WindowsApplicationDataPath invoked from unpackaged context; make sure to use the WindowsPath::Win32Path variant instead"
+   )]
+   WindowsApplicationDataPathInvokedFromWin32Context,
 }
 
 /// Serialize errors as plain strings for the Tauri IPC bridge.
