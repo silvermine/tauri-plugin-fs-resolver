@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "dev:ios": "tauri ios dev",
-    "dev:android": "tauri android dev"
+    "dev:android": "tauri android dev",
+    "dev:msix": "powershell -File ./scripts/run-msix.ps1"
   },
   "dependencies": {
    "@tauri-apps/api": "2.5.0",
