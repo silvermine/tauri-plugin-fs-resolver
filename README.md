@@ -84,7 +84,7 @@ npm run test
 
 ## Install
 
-_This plugin requires a Rust version of at least **1.89.0**_
+_This plugin requires a Rust version of at least **1.94.0**_
 
 ### Rust
 
