@@ -9,6 +9,14 @@
             <input type="radio" value="collection" v-model="androidPathType" /> Collection
          </label>
       </div>
+      <div v-if="os === 'windows'">
+         <label class="radio-button">
+            <input type="radio" value="win32" v-model="windowsPathType" /> Win32
+         </label>
+         <label class="radio-button">
+            <input type="radio" value="winmsix" v-model="windowsPathType" /> WinMsix
+         </label>
+      </div>
       <div class="path-container">
          <p class="selected-path">{{ selectedPath }}</p>
          <p class="selected-path-resolved" :class="{ 'failed': didPathResolutionFail }">{{ selectedPathResolved }}</p>
@@ -25,11 +33,12 @@
 
 import { ref, computed, watch } from 'vue';
 import { platform } from '@tauri-apps/plugin-os';
-import { AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, Win32Path, resolveAndroidPath, resolveAndroidPathCollection, resolveIosPath, resolveLinuxPath, resolveMacPath, resolveWindowsPath } from 'tauri-plugin-fs-resolver';
+import { AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath, resolveAndroidPath, resolveAndroidPathCollection, resolveIosPath, resolveLinuxPath, resolveMacPath, resolveWindowsPath } from 'tauri-plugin-fs-resolver';
 
 const selectedPath = ref<string>('none selected'),
       selectedPathResolved = ref<string>('none resolved'),
       androidPathType = ref<'path' | 'collection'>('path'),
+      windowsPathType = ref<'win32' | 'winmsix'>('win32'),
       os = platform(),
       didPathResolutionFail = ref(false);
 
@@ -51,7 +60,11 @@ const resolvePath = async (path: string) => {
       } else if (os === 'macos') {
          resolvedPath = await resolveMacPath(path as MacPath);
       } else if (os === 'windows') {
-         resolvedPath = await resolveWindowsPath({ win32: path as Win32Path });
+         if (windowsPathType.value === 'win32') {
+            resolvedPath = await resolveWindowsPath({ win32: path as Win32Path });
+         } else {
+            resolvedPath = await resolveWindowsPath({ winMsix: path as WindowsApplicationDataPath });
+         }
       } else {
          throw new Error(`Unsupported platform: ${os}`);
       }
@@ -83,13 +96,21 @@ const directories = computed(() => {
    } else if (os === 'macos') {
       return [...Object.values(MacPath) as string[]];
    } else if (os === 'windows') {
-      return [...Object.values(Win32Path) as string[]];
+      if (windowsPathType.value === 'win32') {
+         return [...Object.values(Win32Path) as string[]];
+      } else {
+         return [...Object.values(WindowsApplicationDataPath) as string[]];
+      }
    } else {
       throw new Error(`Unsupported platform: ${os}`);
    }
 });
 
 watch (androidPathType, () => {
+   resetSelectedPath();
+});
+
+watch (windowsPathType, () => {
    resetSelectedPath();
 });
 

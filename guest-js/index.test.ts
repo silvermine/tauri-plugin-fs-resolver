@@ -98,10 +98,10 @@ describe('fs-resolver actions map to Tauri commands', () => {
 
    it('resolveLinuxPath — sends path, returns resolved path', async () => {
       mockPlatform = 'linux';
-      const resolvedPath = await resolveLinuxPath(LinuxPath.UserHomeDirectory);
+      const resolvedPath = await resolveLinuxPath(LinuxPath.DataHome);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_linux_path');
-      expect(lastArgs.path).toBe(LinuxPath.UserHomeDirectory);
+      expect(lastArgs.path).toBe(LinuxPath.DataHome);
       expect(resolvedPath).toBe(resolvedLinuxPath);
    });
 
@@ -184,16 +184,16 @@ describe('fs-resolver errors when calling from incorrect platform', () => {
 
    it('resolveLinuxPath — throws error if not on Linux', async () => {
       mockPlatform = 'android';
-      await expect(resolveLinuxPath(LinuxPath.UserHomeDirectory)).rejects.toThrow(linuxErrorMsg);
+      await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
       mockPlatform = 'ios';
-      await expect(resolveLinuxPath(LinuxPath.UserHomeDirectory)).rejects.toThrow(linuxErrorMsg);
+      await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
       mockPlatform = 'macos';
-      await expect(resolveLinuxPath(LinuxPath.UserHomeDirectory)).rejects.toThrow(linuxErrorMsg);
+      await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
       mockPlatform = 'windows';
-      await expect(resolveLinuxPath(LinuxPath.UserHomeDirectory)).rejects.toThrow(linuxErrorMsg);
+      await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
    });
 
    it('resolveMacPath — throws error if not on macOS', async () => {

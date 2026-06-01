@@ -191,7 +191,7 @@ import {
 const tempDir = new PathMapping({
    android: AndroidPath.CacheDir,
    ios: IosPath.CachesDirectory,
-   linux: LinuxPath.UserCacheDirectory,
+   linux: LinuxPath.CacheHome,
    macos: MacPath.CachesDirectory,
    windows: { win32: Win32Path.LocalAppData },
 });
@@ -199,7 +199,7 @@ const tempDir = new PathMapping({
 const downloadsDir = new PathMapping({
    ios: IosPath.DownloadsDirectory,
    macos: MacPath.DownloadsDirectory,
-   linux: LinuxPath.UserDownloadDirectory,
+   linux: LinuxPath.DownloadDir,
    android: AndroidPath.ExternalFilesDirectoryDownloads,
    windows: { win32: Win32Path.Downloads },
 });
@@ -224,7 +224,7 @@ let resolver = PathResolver::new();
 let temp_dir = PathMapping {
    android: Some(AndroidPath::CacheDir),
    ios: Some(IosPath::CachesDirectory),
-   linux: Some(LinuxPath::UserCacheDirectory),
+   linux: Some(LinuxPath::CacheHome),
    macos: Some(MacPath::CachesDirectory),
    windows: Some(WindowsPath::Win32(Win32Path::LocalAppData)),
 };
@@ -232,7 +232,7 @@ let temp_dir = PathMapping {
 let downloads_dir = PathMapping {
    android: Some(AndroidPath::ExternalFilesDirectoryDownloads),
    ios: Some(IosPath::DownloadsDirectory),
-   linux: Some(LinuxPath::UserDownloadDirectory),
+   linux: Some(LinuxPath::DownloadDir),
    macos: Some(MacPath::DownloadsDirectory),
    windows: Some(WindowsPath::Win32(Win32Path::Downloads)),
 };
@@ -298,10 +298,10 @@ const downloads = await resolveIosPath(IosPath.DownloadsDirectory);
 import { resolveLinuxPath } from '@silvermine/tauri-plugin-fs-resolver';
 import { LinuxPath } from '@silvermine/tauri-plugin-fs-resolver/types';
 
-const data = await resolveLinuxPath(LinuxPath.UserDataDirectory);
-const caches = await resolveLinuxPath(LinuxPath.UserCacheDirectory);
-const documents = await resolveLinuxPath(LinuxPath.UserDocumentDirectory);
-const downloads = await resolveLinuxPath(LinuxPath.UserDownloadDirectory);
+const data = await resolveLinuxPath(LinuxPath.DataHome);
+const caches = await resolveLinuxPath(LinuxPath.CacheHome);
+const documents = await resolveLinuxPath(LinuxPath.DocumentDir);
+const downloads = await resolveLinuxPath(LinuxPath.DownloadDir);
 ```
 
 ```typescript
@@ -342,7 +342,7 @@ All resolution goes through a `PathResolver` instance. Each method validates
 that the current OS matches the target platform and returns `Result<PathBuf>`.
 
 ```rust
-use fs_resolver::{PathResolver, AndroidPath, IosPath, MacPath, Win32Path, WindowsPath};
+use fs_resolver::{PathResolver, AndroidPath, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath, WindowsPath};
 
 let resolver = PathResolver::new();
 
@@ -356,17 +356,21 @@ let app_support = resolver.resolve_ios(&IosPath::ApplicationSupportDirectory)?;
 let caches = resolver.resolve_ios(&IosPath::CachesDirectory)?;
 
 // Linux
-let config = resolver.resolve_linux(&LinuxPath::UserConfigDirectory)?;
-let desktop = resolver.resolve_linux(&LinuxPath::UserDesktopDirectory)?;
+let config = resolver.resolve_linux(&LinuxPath::ConfigHome)?;
+let desktop = resolver.resolve_linux(&LinuxPath::DesktopDir)?;
 
 // MacOS
 let library = resolver.resolve_mac(&MacPath::LibraryDirectory)?;
 let app_support = resolver.resolve_mac(&MacPath::ApplicationSupportDirectory)?;
 let caches = resolver.resolve_mac(&MacPath::CachesDirectory)?;
 
-// Windows
+// Windows (Win32 / MSI)
 let app_data = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::RoamingAppData))?;
 let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Documents))?;
+
+// Windows (MSIX)
+let local_folder = resolver.resolve_windows(&WindowsPath::WinMsix(WindowsApplicationDataPath::LocalFolder))?;
+let temp_folder = resolver.resolve_windows(&WindowsPath::WinMsix(WindowsApplicationDataPath::TemporaryFolder))?;
 ```
 
 ### Implementation
@@ -376,7 +380,7 @@ let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Document
 | macOS    | Native calls via `objc2-foundation` |
 | iOS      | Native calls via `objc2-foundation` |
 | Linux    | Rust `std::env` and XDG conventions |
-| Windows  | Rust `std::env` and `Known Folder` APIs |
+| Windows  | `SHGetKnownFolderPath` (Win32) or WinRT `ApplicationData` (MSIX) |
 | Android  | JNI bridge to Kotlin via Tauri `PluginHandle` |
 
 On all platforms except Android, paths are resolved directly in Rust
@@ -390,6 +394,86 @@ available in the Kotlin runtime. At plugin initialization, the Tauri
 `PathResolver`, keeping the public API free of Tauri types on all
 platforms.
 
+#### Windows paths
+
+Windows path resolution is a **tagged union** (`WindowsPath`) with two variants.
+Callers choose the variant that matches how the app is packaged.
+If the incorrect variant is used in the app, an exception is thrown.
+For example, if the user attempts to resolve a `Win32Path` in an MSIX packaged
+app (or vice versa), an exception will be thrown.
+
+| Variant | Serde / TypeScript tag | Enum | Resolution API |
+| ------- | ---------------------- | ---- | -------------- |
+| Unpackaged Win32 / MSI | `win32` | `Win32Path` | `SHGetKnownFolderPath` ([KNOWNFOLDERID](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid)) |
+| MSIX (package identity) | `winMsix` | `WindowsApplicationDataPath` | WinRT [`ApplicationData`](https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata) |
+
+**`Win32Path`** covers standard desktop known folders (`Documents`, `LocalAppData`,
+`Downloads`, etc.). Use this for unpackaged apps, MSI installs, and any Win32
+process without package identity. Windows has no API to detect MSI specifically;
+all unpackaged Win32 processes (including MSI) lack package identity and share
+the same path model.
+
+**`WindowsApplicationDataPath`** covers the five app-container folders exposed
+by `ApplicationData::Current()` (`LocalFolder`, `RoamingFolder`,
+`LocalCacheFolder`, `TemporaryFolder`, `SharedLocalFolder`). Use this when the
+app ships as MSIX (Microsoft Store, sideloaded `.msix`, or loose-layout debug
+runs with package identity). These paths live under
+`AppData\Local\Packages\<package-id>\…` and are the correct locations for
+app-private data in a sandboxed package.
+
+At runtime the resolver validates that the chosen variant matches the process
+context:
+
+   * Resolving a `win32` path while running inside an MSIX package returns
+     `Win32PathInvokedFromMsixPackagedContext`.
+   * Resolving a `winMsix` path outside a package returns
+     `WindowsApplicationDataPathInvokedFromWin32Context`.
+
+Package identity is detected by whether `ApplicationData::Current()` succeeds —
+the same signal described in Microsoft's [winapp CLI + Tauri
+guide](https://learn.microsoft.com/en-us/windows/apps/dev-tools/winapp-cli/guides/tauri).
+
+**TypeScript**
+
+```typescript
+import { Win32Path, WindowsApplicationDataPath } from '@silvermine/tauri-plugin-fs-resolver/types';
+
+// Unpackaged / MSI — known folders
+const downloads = { win32: Win32Path.Downloads };
+
+// MSIX — app-container folders
+const appData = { winMsix: WindowsApplicationDataPath.LocalFolder };
+```
+
+**Rust**
+
+```rust
+use fs_resolver::{WindowsPath, Win32Path, WindowsApplicationDataPath};
+
+let downloads = WindowsPath::Win32(Win32Path::Downloads);
+let app_data = WindowsPath::WinMsix(WindowsApplicationDataPath::LocalFolder);
+```
+
+#### Linux paths
+
+Linux path resolution follows the [XDG Base Directory
+Specification](https://specifications.freedesktop.org/basedir-spec/latest/) and
+[XDG User Directories](https://www.freedesktop.org/wiki/Software/xdg-user-dirs/).
+
+`LinuxPath` returns **base directories**, not app-specific paths. Append your
+app identifier after resolution (e.g. `DataHome` → `~/.local/share/<app-id>/`).
+
+| Category | Variants | Source |
+| -------- | -------- | ------ |
+| XDG base | `DataHome`, `ConfigHome`, `CacheHome`, `StateHome`, `RuntimeDir`, `Home`, `ExecutableDir`, `FontDir` | `$XDG_*` env vars with spec-defined fallbacks |
+| User dirs | `DesktopDir`, `DocumentDir`, `DownloadDir`, `MusicDir`, `PictureDir`, `VideoDir`, `TemplateDir`, `PublicDir` | `~/.config/user-dirs.dirs` |
+
+`RuntimeDir` (`$XDG_RUNTIME_DIR`) has no fallback — it must be set by
+pam/systemd. Missing required variables return `LinuxEnvironmentMissing`.
+
+Flatpak and Snap runtimes remap `$XDG_*` variables to sandbox paths
+automatically; no special handling is needed in the plugin.
+
 ### Examples
 
 Check out the [examples/tauri-app](examples/tauri-app) directory for a working example of
@@ -401,6 +485,9 @@ To run the example app:
 # Desktop
 npm run example:dev
 
+# Windows MSIX (package identity via winapp CLI)
+npm run example:dev:msix
+
 # iOS
 npm run example:init:ios   # first time only
 npm run example:dev:ios
@@ -409,6 +496,27 @@ npm run example:dev:ios
 npm run example:init:android   # first time only
 npm run example:dev:android
 ```
+
+#### Windows MSIX testing
+
+The example app includes a `Package.appxmanifest` and a `dev:msix` script
+that uses the [winapp CLI][winapp-tauri] to build the app and launch it with
+package identity (`winapp run`). From the repo root:
+
+```bash
+npm run example:dev:msix
+```
+
+This runs `examples/tauri-app/scripts/run-msix.ps1`, which debug-builds the
+example, then registers and launches it as a loose-layout MSIX package. In the
+app UI, switch the **WinMsix** radio button to exercise
+`WindowsApplicationDataPath` variants; **Win32** covers known-folder paths for
+unpackaged runs (`npm run example:dev`).
+
+Prerequisites: Windows 11, [winapp CLI][winapp-tauri]
+(`winget install microsoft.winappcli --source winget`), and PowerShell.
+
+[winapp-tauri]: https://learn.microsoft.com/en-us/windows/apps/dev-tools/winapp-cli/guides/tauri
 
 #### iOS Setup
 

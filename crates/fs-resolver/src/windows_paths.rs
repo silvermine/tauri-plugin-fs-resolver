@@ -1,6 +1,12 @@
 use serde::Deserialize;
 use std::fmt::Display;
 
+/// Tagged union that mirrors the Rust `WindowsPath` enum's serde representation.
+/// Callers pick whichever variant fits their packaging model; the Rust side
+/// deserializes using the tag key (`win32` or `winMsix`).
+/// Which one to use is determined by the caller, based on the packaging model.
+/// If the process is intended to run in a packaged (MSIX) app context, the `WinMsix` variant should be used.
+/// If the process is intended to run in a unpackaged (Win32) app context, the `Win32` variant should be used.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum WindowsPath {
@@ -530,17 +536,9 @@ pub enum WindowsApplicationDataPath {
    // C:\Users\<user>\AppData\Local\Packages\<id>\LocalState
    LocalFolder,
 
-   // App-specific local settings container (registry-backed, not a filesystem path).
-   // HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\<id>
-   LocalSettings,
-
    // App-specific roaming data. Synced across devices via the user's Microsoft account.
    // C:\Users\<user>\AppData\Local\Packages\<id>\RoamingState
    RoamingFolder,
-
-   // App-specific roaming settings container (registry-backed, not a filesystem path).
-   // Synced across devices via the user's Microsoft account.
-   RoamingSettings,
 
    // App data shared between all users of the machine for this package.
    // C:\ProgramData\Packages\<id>\LocalCache
@@ -556,9 +554,7 @@ impl Display for WindowsApplicationDataPath {
       match self {
          WindowsApplicationDataPath::LocalCacheFolder => write!(f, "localCacheFolder"),
          WindowsApplicationDataPath::LocalFolder => write!(f, "localFolder"),
-         WindowsApplicationDataPath::LocalSettings => write!(f, "localSettings"),
          WindowsApplicationDataPath::RoamingFolder => write!(f, "roamingFolder"),
-         WindowsApplicationDataPath::RoamingSettings => write!(f, "roamingSettings"),
          WindowsApplicationDataPath::SharedLocalFolder => write!(f, "sharedLocalFolder"),
          WindowsApplicationDataPath::TemporaryFolder => write!(f, "temporaryFolder"),
       }

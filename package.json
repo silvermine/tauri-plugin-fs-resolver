@@ -38,7 +38,8 @@
     "example:dev:ios": "cd examples/tauri-app && npm run dev:ios",
     "example:dev:android": "cd examples/tauri-app && npm run dev:android",
     "example:init:ios": "cd examples/tauri-app && npm run tauri ios init",
-    "example:init:android": "cd examples/tauri-app && npm run tauri android init"
+    "example:init:android": "cd examples/tauri-app && npm run tauri android init",
+    "example:dev:msix": "cd examples/tauri-app && npm run dev:msix"
   },
   "author": "Jeremy Thomerson",
   "license": "MIT",

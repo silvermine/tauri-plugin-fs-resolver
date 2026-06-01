@@ -20,3 +20,6 @@ Thumbs.db
 
 # Gen
 src-tauri/gen/
+
+# Windows SDK packages and generated files
+.winapp
