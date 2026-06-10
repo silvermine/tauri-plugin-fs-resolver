@@ -23,3 +23,6 @@ tauri = { version = "2.9.3", features = [] }
 tauri-plugin-fs-resolver = { path = "../../../" }
 tauri-plugin-os = { version = "2.3.2", features = [] }
 
+[dev-dependencies]
+fs-resolver = { path = "../../../crates/fs-resolver", features = ["test-helpers"] }
+

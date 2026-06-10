@@ -66,7 +66,7 @@ impl PathResolver {
       self
    }
 
-   #[cfg(test)]
+   #[cfg(any(test, feature = "test-helpers"))]
    pub fn new_for_test(
       os: String,
       resolve_android: AndroidPathResolver,

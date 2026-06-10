@@ -3119,6 +3119,7 @@ dependencies = [
 name = "tauri-app"
 version = "0.1.0"
 dependencies = [
+ "fs-resolver",
  "tauri",
  "tauri-build",
  "tauri-plugin-fs-resolver",

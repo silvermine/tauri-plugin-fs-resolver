@@ -82,6 +82,103 @@ Run Typescript tests:
 npm run test
 ```
 
+#### Testing mappings in your app (Rust)
+
+If your app defines `CrossPlatformMapping` values and resolves them through
+`PathResolver`, you can unit-test that logic without calling real OS path APIs.
+The `fs-resolver` crate exposes `PathResolver::new_for_test` behind the
+optional `test-helpers` feature. Pass a synthetic OS string and stub resolve
+functions; the resolver then behaves as if it were running on that platform.
+
+`new_for_test` is compiled only when `test-helpers` is enabled or when running
+`fs-resolver`'s own unit tests (`#[cfg(test)]`). Consumer crates do not get
+`cfg(test)` when built as dependencies, so enable the feature explicitly.
+
+Add `fs-resolver` with the feature as a `dev-dependency` in your
+`src-tauri/Cargo.toml`. Because Cargo feature unification is additive across the
+whole build graph, putting `test-helpers` under `[dependencies]` would compile
+`new_for_test` into release builds. Use `[dev-dependencies]` even when tests
+live in `#[cfg(test)]` modules in the same crate (as in the example app). Only
+use a regular dependency if production code also needs `fs-resolver` directly
+(rare):
+
+```toml
+[dev-dependencies]
+fs-resolver = { path = "../crates/fs-resolver", features = ["test-helpers"] }
+```
+
+Construct a resolver with stub closures and assert on `resolve_mapping` or the
+per-platform methods:
+
+```rust
+use fs_resolver::{
+   AndroidPath, AndroidPathCollection, CrossPlatformMapping, IosPath,
+   LinuxPath, MacPath, PathResolver, PlatformMapping, Result, Win32Path,
+   WindowsPath,
+};
+use std::path::PathBuf;
+
+fn create_test_resolver(platform: &str) -> PathResolver {
+   let resolve_android = Box::new(|path: &AndroidPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("android/{}", path)))
+   });
+   let resolve_android_path_collection = Box::new(
+      |collection: &AndroidPathCollection| -> Result<Vec<PathBuf>> {
+         Ok(vec![PathBuf::from(format!("android/{}", collection))])
+      },
+   );
+   let resolve_ios = Box::new(|path: &IosPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("ios/{}", path)))
+   });
+   let resolve_linux = Box::new(|path: &LinuxPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("linux/{}", path)))
+   });
+   let resolve_mac = Box::new(|path: &MacPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("apple/{}", path)))
+   });
+   let resolve_windows = Box::new(|path: &WindowsPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("windows/{}", path)))
+   });
+
+   PathResolver::new_for_test(
+      platform.to_string(),
+      resolve_android,
+      resolve_android_path_collection,
+      resolve_ios,
+      resolve_linux,
+      resolve_mac,
+      resolve_windows,
+   )
+}
+
+#[test]
+fn resolves_mapping_on_android() {
+   let resolver = create_test_resolver("android");
+   let mapping = CrossPlatformMapping {
+      android: Some(PlatformMapping {
+         platform_path: AndroidPath::DataDir,
+         relative_path: Some("data".to_string()),
+      }),
+      ios: None,
+      linux: None,
+      macos: None,
+      windows: None,
+   };
+
+   assert_eq!(
+      resolver.resolve_mapping(&mapping).unwrap(),
+      PathBuf::from("android/dataDir/data"),
+   );
+}
+```
+
+See [examples/tauri-app/src-tauri/src/lib.rs](examples/tauri-app/src-tauri/src/lib.rs)
+for a fuller example that exercises per-platform resolve methods across all
+supported OS values.
+
+Do not enable `test-helpers` in release builds of apps that ship to users — it
+is intended for test and development use only.
+
 ## Install
 
 _This plugin requires a Rust version of at least **1.94.0**_
