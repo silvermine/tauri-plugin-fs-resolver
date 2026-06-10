@@ -28,3 +28,6 @@ windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_Foundat
 # - Storage_Search: Required because StorageFolder implements IStorageFolderQueryOperations,
 #   and the crate gates methods returning StorageFolder behind this feature.
 windows = { version = "0.62.2", features = ["Storage", "Storage_Search"] }
+
+[dev-dependencies]
+test-case = "3.3.1"
