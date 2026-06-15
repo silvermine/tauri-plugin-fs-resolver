@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::ios_paths::IosPath;
-use crate::{AndroidPathCollection, Error, LinuxPath, PathMapping};
+use crate::path_mapping::validate_relative_path;
+use crate::{AndroidPathCollection, CrossPlatformMapping, Error, LinuxPath};
 use std::fmt::Display;
 use std::path::PathBuf;
 
@@ -11,15 +12,19 @@ use crate::windows_paths::WindowsPath;
 type AndroidPathResolver = Box<dyn Fn(&AndroidPath) -> Result<PathBuf> + Send + Sync>;
 type AndroidPathCollectionResolver =
    Box<dyn Fn(&AndroidPathCollection) -> Result<Vec<PathBuf>> + Send + Sync>;
+type IosPathResolver = Box<dyn Fn(&IosPath) -> Result<PathBuf> + Send + Sync>;
+type LinuxPathResolver = Box<dyn Fn(&LinuxPath) -> Result<PathBuf> + Send + Sync>;
+type MacPathResolver = Box<dyn Fn(&MacPath) -> Result<PathBuf> + Send + Sync>;
+type WindowsPathResolver = Box<dyn Fn(&WindowsPath) -> Result<PathBuf> + Send + Sync>;
 
 pub struct PathResolver {
    os: String,
    resolve_android: AndroidPathResolver,
    resolve_android_path_collection: AndroidPathCollectionResolver,
-   resolve_ios: fn(&IosPath) -> Result<PathBuf>,
-   resolve_linux: fn(&LinuxPath) -> Result<PathBuf>,
-   resolve_mac: fn(&MacPath) -> Result<PathBuf>,
-   resolve_windows: fn(&WindowsPath) -> Result<PathBuf>,
+   resolve_ios: IosPathResolver,
+   resolve_linux: LinuxPathResolver,
+   resolve_mac: MacPathResolver,
+   resolve_windows: WindowsPathResolver,
 }
 
 impl Default for PathResolver {
@@ -36,10 +41,18 @@ impl PathResolver {
          resolve_android_path_collection: Box::new(|_| {
             Err(Error::AndroidPathResolutionNotConfigured)
          }),
-         resolve_ios: crate::ios_resolve::resolve_ios_path,
-         resolve_linux: crate::linux_resolve::resolve_linux_path,
-         resolve_mac: crate::mac_resolve::resolve_mac_path,
-         resolve_windows: crate::windows_resolve::resolve_windows_path,
+         resolve_ios: Box::new(|path: &IosPath| -> Result<PathBuf> {
+            crate::ios_resolve::resolve_ios_path(path)
+         }),
+         resolve_linux: Box::new(|path: &LinuxPath| -> Result<PathBuf> {
+            crate::linux_resolve::resolve_linux_path(path)
+         }),
+         resolve_mac: Box::new(|path: &MacPath| -> Result<PathBuf> {
+            crate::mac_resolve::resolve_mac_path(path)
+         }),
+         resolve_windows: Box::new(|path: &WindowsPath| -> Result<PathBuf> {
+            crate::windows_resolve::resolve_windows_path(path)
+         }),
       }
    }
 
@@ -53,15 +66,15 @@ impl PathResolver {
       self
    }
 
-   #[cfg(test)]
+   #[cfg(any(test, feature = "test-helpers"))]
    pub fn new_for_test(
       os: String,
       resolve_android: AndroidPathResolver,
       resolve_android_path_collection: AndroidPathCollectionResolver,
-      resolve_ios: fn(&IosPath) -> Result<PathBuf>,
-      resolve_linux: fn(&LinuxPath) -> Result<PathBuf>,
-      resolve_mac: fn(&MacPath) -> Result<PathBuf>,
-      resolve_windows: fn(&WindowsPath) -> Result<PathBuf>,
+      resolve_ios: IosPathResolver,
+      resolve_linux: LinuxPathResolver,
+      resolve_mac: MacPathResolver,
+      resolve_windows: WindowsPathResolver,
    ) -> Self {
       Self {
          os,
@@ -74,39 +87,54 @@ impl PathResolver {
       }
    }
 
-   pub fn resolve_mapping(&self, mapping: &PathMapping) -> Result<PathBuf> {
+   pub fn resolve_mapping(&self, mapping: &CrossPlatformMapping) -> Result<PathBuf> {
       match self.os.as_str() {
          "android" => {
-            if let Some(path) = &mapping.android {
-               return self.resolve_android(path);
+            if let Some(platform_mapping) = &mapping.android {
+               return self.resolve_with_relative_path(
+                  || self.resolve_android(&platform_mapping.platform_path),
+                  &platform_mapping.relative_path,
+               );
             }
 
             Err(Error::PathMappingUndefined("android".to_string()))
          }
          "ios" => {
-            if let Some(path) = &mapping.ios {
-               return self.resolve_ios(path);
+            if let Some(platform_mapping) = &mapping.ios {
+               return self.resolve_with_relative_path(
+                  || self.resolve_ios(&platform_mapping.platform_path),
+                  &platform_mapping.relative_path,
+               );
             }
 
             Err(Error::PathMappingUndefined("ios".to_string()))
          }
          "linux" => {
-            if let Some(path) = &mapping.linux {
-               return self.resolve_linux(path);
+            if let Some(platform_mapping) = &mapping.linux {
+               return self.resolve_with_relative_path(
+                  || self.resolve_linux(&platform_mapping.platform_path),
+                  &platform_mapping.relative_path,
+               );
             }
 
             Err(Error::PathMappingUndefined("linux".to_string()))
          }
          "macos" => {
-            if let Some(path) = &mapping.macos {
-               return self.resolve_mac(path);
+            if let Some(platform_mapping) = &mapping.macos {
+               return self.resolve_with_relative_path(
+                  || self.resolve_mac(&platform_mapping.platform_path),
+                  &platform_mapping.relative_path,
+               );
             }
 
             Err(Error::PathMappingUndefined("macos".to_string()))
          }
          "windows" => {
-            if let Some(path) = &mapping.windows {
-               return self.resolve_windows(path);
+            if let Some(platform_mapping) = &mapping.windows {
+               return self.resolve_with_relative_path(
+                  || self.resolve_windows(&platform_mapping.platform_path),
+                  &platform_mapping.relative_path,
+               );
             }
 
             Err(Error::PathMappingUndefined("windows".to_string()))
@@ -159,12 +187,30 @@ impl PathResolver {
 
       Ok(())
    }
+
+   fn resolve_with_relative_path<F>(
+      &self,
+      path_resolver: F,
+      relative_path: &Option<String>,
+   ) -> Result<PathBuf>
+   where
+      F: FnOnce() -> Result<PathBuf>,
+   {
+      let resolved_path = path_resolver()?;
+      if let Some(relative_path) = relative_path {
+         validate_relative_path(relative_path)?;
+         Ok(resolved_path.join(relative_path))
+      } else {
+         Ok(resolved_path)
+      }
+   }
 }
 
 #[cfg(test)]
 mod tests {
    use super::*;
    use crate::Error;
+   use crate::PlatformMapping;
    use crate::Win32Path;
 
    const KNOWN_OS: [&str; 5] = ["ios", "macos", "android", "windows", "linux"];
@@ -472,12 +518,27 @@ mod tests {
 
    #[test]
    fn resolve_path_mapping_maps_to_correct_os() {
-      let path_mapping = PathMapping {
-         android: Some(AndroidPath::DataDir),
-         ios: Some(IosPath::DocumentDirectory),
-         linux: Some(LinuxPath::DataHome),
-         macos: Some(MacPath::ApplicationDirectory),
-         windows: Some(WindowsPath::Win32(Win32Path::LocalAppData)),
+      let path_mapping = CrossPlatformMapping {
+         android: Some(PlatformMapping {
+            platform_path: AndroidPath::DataDir,
+            relative_path: None,
+         }),
+         ios: Some(PlatformMapping {
+            platform_path: IosPath::DocumentDirectory,
+            relative_path: None,
+         }),
+         linux: Some(PlatformMapping {
+            platform_path: LinuxPath::DataHome,
+            relative_path: None,
+         }),
+         macos: Some(PlatformMapping {
+            platform_path: MacPath::ApplicationDirectory,
+            relative_path: None,
+         }),
+         windows: Some(PlatformMapping {
+            platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+            relative_path: None,
+         }),
       };
 
       for os in KNOWN_OS {
@@ -525,7 +586,7 @@ mod tests {
 
    #[test]
    fn resolve_path_mapping_with_undefined_path_returns_error() {
-      let path_mapping = PathMapping {
+      let path_mapping = CrossPlatformMapping {
          android: None,
          ios: None,
          linux: None,
@@ -569,6 +630,135 @@ mod tests {
       }
    }
 
+   #[test]
+   fn resolve_path_mapping_with_relative_path_returns_correct_path() {
+      let path_mapping = CrossPlatformMapping {
+         android: Some(PlatformMapping {
+            platform_path: AndroidPath::DataDir,
+            relative_path: Some("the/android/path".to_string()),
+         }),
+         ios: Some(PlatformMapping {
+            platform_path: IosPath::DocumentDirectory,
+            relative_path: Some("the/ios/path".to_string()),
+         }),
+         linux: Some(PlatformMapping {
+            platform_path: LinuxPath::DataHome,
+            relative_path: Some("the/linux/path".to_string()),
+         }),
+         macos: Some(PlatformMapping {
+            platform_path: MacPath::ApplicationDirectory,
+            relative_path: Some("the/mac/path".to_string()),
+         }),
+         windows: Some(PlatformMapping {
+            platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+            relative_path: Some("the/windows/path".to_string()),
+         }),
+      };
+
+      for os in KNOWN_OS {
+         let resolver = create_test_resolver(os.to_string());
+         let resolved = resolver.resolve_mapping(&path_mapping).unwrap();
+
+         if os == "android" {
+            assert_eq!(
+               resolved,
+               PathBuf::from("android/dataDir/the/android/path"),
+               "Incorrect path for android with os {}",
+               os
+            );
+         } else if os == "ios" {
+            assert_eq!(
+               resolved,
+               PathBuf::from("ios/documentDirectory/the/ios/path"),
+               "Incorrect path for ios with os {}",
+               os
+            );
+         } else if os == "linux" {
+            assert_eq!(
+               resolved,
+               PathBuf::from("linux/dataHome/the/linux/path"),
+               "Incorrect path for linux with os {}",
+               os
+            );
+         } else if os == "macos" {
+            assert_eq!(
+               resolved,
+               PathBuf::from("apple/applicationDirectory/the/mac/path"),
+               "Incorrect path for macos with os {}",
+               os
+            );
+         } else if os == "windows" {
+            assert_eq!(
+               resolved,
+               PathBuf::from("windows/win32::localAppData/the/windows/path"),
+               "Incorrect path for windows with os {}",
+               os
+            );
+         }
+      }
+   }
+
+   #[test]
+   fn resolve_path_mapping_with_invalid_relative_path_returns_error() {
+      let path_mapping = CrossPlatformMapping {
+         android: Some(PlatformMapping {
+            platform_path: AndroidPath::DataDir,
+            relative_path: Some("../escape".to_string()),
+         }),
+         ios: None,
+         linux: None,
+         macos: None,
+         windows: None,
+      };
+
+      let resolver = create_test_resolver("android".to_string());
+      let error = resolver.resolve_mapping(&path_mapping).unwrap_err();
+
+      assert_eq!(
+         error,
+         Error::InvalidPath(
+            "Relative path must contain only normal path segments: ../escape".to_string()
+         )
+      );
+   }
+
+   #[test]
+   fn returns_error_when_resolving_mapping_with_invalid_relative_path() {
+      let path_mapping = CrossPlatformMapping {
+         android: Some(PlatformMapping {
+            platform_path: AndroidPath::DataDir,
+            relative_path: Some("../escape".to_string()),
+         }),
+         ios: Some(PlatformMapping {
+            platform_path: IosPath::DocumentDirectory,
+            relative_path: Some("../escape".to_string()),
+         }),
+         linux: Some(PlatformMapping {
+            platform_path: LinuxPath::DataHome,
+            relative_path: Some("../escape".to_string()),
+         }),
+         macos: Some(PlatformMapping {
+            platform_path: MacPath::ApplicationDirectory,
+            relative_path: Some("../escape".to_string()),
+         }),
+         windows: Some(PlatformMapping {
+            platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+            relative_path: Some("../escape".to_string()),
+         }),
+      };
+
+      for os in KNOWN_OS {
+         let resolver = create_test_resolver(os.to_string());
+         let error = resolver.resolve_mapping(&path_mapping).unwrap_err();
+         assert_eq!(
+            error,
+            Error::InvalidPath(
+               "Relative path must contain only normal path segments: ../escape".to_string()
+            )
+         );
+      }
+   }
+
    fn create_test_resolver(os: String) -> PathResolver {
       let resolve_android = Box::new(|path: &AndroidPath| -> Result<PathBuf> {
          Ok(PathBuf::from(format!("android/{}", path)))
@@ -580,14 +770,30 @@ mod tests {
          },
       );
 
+      let resolve_ios = Box::new(|path: &IosPath| -> Result<PathBuf> {
+         Ok(PathBuf::from(format!("ios/{}", path)))
+      });
+
+      let resolve_linux = Box::new(|path: &LinuxPath| -> Result<PathBuf> {
+         Ok(PathBuf::from(format!("linux/{}", path)))
+      });
+
+      let resolve_mac = Box::new(|path: &MacPath| -> Result<PathBuf> {
+         Ok(PathBuf::from(format!("apple/{}", path)))
+      });
+
+      let resolve_windows = Box::new(|path: &WindowsPath| -> Result<PathBuf> {
+         Ok(PathBuf::from(format!("windows/{}", path)))
+      });
+
       PathResolver::new_for_test(
          os,
          resolve_android,
          resolve_android_path_collection,
-         |path: &IosPath| -> Result<PathBuf> { Ok(PathBuf::from(format!("ios/{}", path))) },
-         |path: &LinuxPath| -> Result<PathBuf> { Ok(PathBuf::from(format!("linux/{}", path))) },
-         |path: &MacPath| -> Result<PathBuf> { Ok(PathBuf::from(format!("apple/{}", path))) },
-         |path: &WindowsPath| -> Result<PathBuf> { Ok(PathBuf::from(format!("windows/{}", path))) },
+         resolve_ios,
+         resolve_linux,
+         resolve_mac,
+         resolve_windows,
       )
    }
 }

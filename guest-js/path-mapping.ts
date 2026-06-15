@@ -1,75 +1,137 @@
 import { platform } from '@tauri-apps/plugin-os';
-import { resolveAndroidPath, resolveIosPath, resolveLinuxPath, resolveMacPath, resolveWindowsPath } from './index';
+import { resolveAndroidPath, resolveIosPath, resolveLinuxPath, resolveMacPath, resolveWindowsPath } from './platform-paths';
 import { AndroidPath, IosPath, LinuxPath, MacPath, WindowsPath } from './types';
+import { join } from '@tauri-apps/api/path';
 
-export class PathMapping {
-   private _ios?: IosPath;
-   private _macos?: MacPath;
-   private _linux?: LinuxPath;
-   private _android?: AndroidPath;
-   private _windows?: WindowsPath;
+/**
+ * Per-platform path mapping: a platform path enum plus an optional relative suffix.
+ *
+ * These types are resolved in-process on the frontend. They are not sent across IPC;
+ * only individual path enums cross the boundary via per-platform resolve commands.
+ */
+export type PlatformMapping<T extends AndroidPath | IosPath | LinuxPath | MacPath | WindowsPath> = {
+   platformPath: T;
+   relativePath?: string;
+};
 
-   public constructor(paths: {
-      android?: AndroidPath;
-      ios?: IosPath;
-      linux?: LinuxPath;
-      macos?: MacPath;
-      windows?: WindowsPath;
-   }) {
-      this._android = paths.android;
-      this._ios = paths.ios;
-      this._linux = paths.linux;
-      this._macos = paths.macos;
-      this._windows = paths.windows;
-   }
+/**
+ * Cross-platform path definition with optional per-OS mappings.
+ *
+ * Parallel to the Rust `CrossPlatformMapping` type. Use `resolveMapping()` here or
+ * `PathResolver::resolve_mapping()` in Rust — same semantics, separate implementations.
+ */
+export type CrossPlatformMapping = {
+   android?: PlatformMapping<AndroidPath>;
+   ios?: PlatformMapping<IosPath>;
+   linux?: PlatformMapping<LinuxPath>;
+   macos?: PlatformMapping<MacPath>;
+   windows?: PlatformMapping<WindowsPath>;
+};
 
-   public async resolve(): Promise<string> {
-      const os = platform();
+/**
+ * Resolves a cross-platform mapping for the current OS.
+ *
+ * Picks the mapping entry for the current platform, invokes the corresponding
+ * per-platform resolve helper (IPC), then optionally joins `relativePath`.
+ */
+export async function resolveMapping(mapping: CrossPlatformMapping): Promise<string> {
+   const os = platform();
 
-      switch (os) {
-         case 'android': {
-            if (this._android) {
-               return await resolveAndroidPath(this._android);
-            }
+   switch (os) {
+      case 'android': {
+         const android = mapping.android;
 
-            throw new Error('No path defined for Android');
+         if (android) {
+            return await resolveWithRelativePath(
+               () => { return resolveAndroidPath(android.platformPath); },
+               android.relativePath
+            );
          }
 
-         case 'ios': {
-            if (this._ios) {
-               return await resolveIosPath(this._ios);
-            }
+         throw new Error('No path defined for Android');
+      }
 
-            throw new Error('No path defined for iOS');
+      case 'ios': {
+         const ios = mapping.ios;
+
+         if (ios) {
+            return await resolveWithRelativePath(
+               () => { return resolveIosPath(ios.platformPath); },
+               ios.relativePath
+            );
          }
 
-         case 'linux': {
-            if (this._linux) {
-               return await resolveLinuxPath(this._linux);
-            }
+         throw new Error('No path defined for iOS');
+      }
 
-            throw new Error('No path defined for Linux');
+      case 'linux': {
+         const linux = mapping.linux;
+
+         if (linux) {
+            return await resolveWithRelativePath(
+               () => { return resolveLinuxPath(linux.platformPath); },
+               linux.relativePath
+            );
          }
 
-         case 'macos': {
-            if (this._macos) {
-               return await resolveMacPath(this._macos);
-            }
+         throw new Error('No path defined for Linux');
+      }
 
-            throw new Error('No path defined for macOS');
+      case 'macos': {
+         const macos = mapping.macos;
+
+         if (macos) {
+            return await resolveWithRelativePath(
+               () => { return resolveMacPath(macos.platformPath); },
+               macos.relativePath
+            );
          }
 
-         case 'windows': {
-            if (this._windows) {
-               return await resolveWindowsPath(this._windows);
-            }
+         throw new Error('No path defined for macOS');
+      }
 
-            throw new Error('No path defined for Windows');
+      case 'windows': {
+         const windows = mapping.windows;
+
+         if (windows) {
+            return await resolveWithRelativePath(
+               () => { return resolveWindowsPath(windows.platformPath); },
+               windows.relativePath
+            );
          }
 
-         default: {
-            throw new Error(`Unsupported platform: ${os}`);
-         }
+         throw new Error('No path defined for Windows');
+      }
+
+      default: {
+         throw new Error(`Unsupported platform: ${os}`);
       }
    }
+}
+
+function validateRelativePath(relativePath: string): void {
+   if (relativePath.length === 0) {
+      throw new Error('Relative path must not be empty');
+   }
+
+   if (relativePath.startsWith('/') || /^[a-zA-Z]:/.test(relativePath)) {
+      throw new Error(`Relative path must contain only normal path segments: ${relativePath}`);
+   }
+
+   for (const segment of relativePath.split(/[/\\]/)) {
+      if (segment === '' || segment === '.' || segment === '..') {
+         throw new Error(`Relative path must contain only normal path segments: ${relativePath}`);
+      }
+   }
+}
+
+async function resolveWithRelativePath(resolveBasePath: () => Promise<string>, relativePath?: string): Promise<string> {
+   const path = await resolveBasePath();
+
+   if (relativePath !== undefined) {
+      validateRelativePath(relativePath);
+      return join(path, relativePath);
+   }
+
+   return path;
 }

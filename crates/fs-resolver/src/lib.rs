@@ -16,6 +16,6 @@ pub use error::{Error, Result};
 pub use ios_paths::IosPath;
 pub use linux_paths::LinuxPath;
 pub use mac_paths::MacPath;
-pub use path_mapping::PathMapping;
+pub use path_mapping::{CrossPlatformMapping, PlatformMapping};
 pub use path_resolver::PathResolver;
 pub use windows_paths::{Win32Path, WindowsApplicationDataPath, WindowsPath};

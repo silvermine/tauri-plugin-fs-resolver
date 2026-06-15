@@ -82,6 +82,103 @@ Run Typescript tests:
 npm run test
 ```
 
+#### Testing mappings in your app (Rust)
+
+If your app defines `CrossPlatformMapping` values and resolves them through
+`PathResolver`, you can unit-test that logic without calling real OS path APIs.
+The `fs-resolver` crate exposes `PathResolver::new_for_test` behind the
+optional `test-helpers` feature. Pass a synthetic OS string and stub resolve
+functions; the resolver then behaves as if it were running on that platform.
+
+`new_for_test` is compiled only when `test-helpers` is enabled or when running
+`fs-resolver`'s own unit tests (`#[cfg(test)]`). Consumer crates do not get
+`cfg(test)` when built as dependencies, so enable the feature explicitly.
+
+Add `fs-resolver` with the feature as a `dev-dependency` in your
+`src-tauri/Cargo.toml`. Because Cargo feature unification is additive across the
+whole build graph, putting `test-helpers` under `[dependencies]` would compile
+`new_for_test` into release builds. Use `[dev-dependencies]` even when tests
+live in `#[cfg(test)]` modules in the same crate (as in the example app). Only
+use a regular dependency if production code also needs `fs-resolver` directly
+(rare):
+
+```toml
+[dev-dependencies]
+fs-resolver = { path = "../crates/fs-resolver", features = ["test-helpers"] }
+```
+
+Construct a resolver with stub closures and assert on `resolve_mapping` or the
+per-platform methods:
+
+```rust
+use fs_resolver::{
+   AndroidPath, AndroidPathCollection, CrossPlatformMapping, IosPath,
+   LinuxPath, MacPath, PathResolver, PlatformMapping, Result, Win32Path,
+   WindowsPath,
+};
+use std::path::PathBuf;
+
+fn create_test_resolver(platform: &str) -> PathResolver {
+   let resolve_android = Box::new(|path: &AndroidPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("android/{}", path)))
+   });
+   let resolve_android_path_collection = Box::new(
+      |collection: &AndroidPathCollection| -> Result<Vec<PathBuf>> {
+         Ok(vec![PathBuf::from(format!("android/{}", collection))])
+      },
+   );
+   let resolve_ios = Box::new(|path: &IosPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("ios/{}", path)))
+   });
+   let resolve_linux = Box::new(|path: &LinuxPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("linux/{}", path)))
+   });
+   let resolve_mac = Box::new(|path: &MacPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("apple/{}", path)))
+   });
+   let resolve_windows = Box::new(|path: &WindowsPath| -> Result<PathBuf> {
+      Ok(PathBuf::from(format!("windows/{}", path)))
+   });
+
+   PathResolver::new_for_test(
+      platform.to_string(),
+      resolve_android,
+      resolve_android_path_collection,
+      resolve_ios,
+      resolve_linux,
+      resolve_mac,
+      resolve_windows,
+   )
+}
+
+#[test]
+fn resolves_mapping_on_android() {
+   let resolver = create_test_resolver("android");
+   let mapping = CrossPlatformMapping {
+      android: Some(PlatformMapping {
+         platform_path: AndroidPath::DataDir,
+         relative_path: Some("data".to_string()),
+      }),
+      ios: None,
+      linux: None,
+      macos: None,
+      windows: None,
+   };
+
+   assert_eq!(
+      resolver.resolve_mapping(&mapping).unwrap(),
+      PathBuf::from("android/dataDir/data"),
+   );
+}
+```
+
+See [examples/tauri-app/src-tauri/src/lib.rs](examples/tauri-app/src-tauri/src/lib.rs)
+for a fuller example that exercises per-platform resolve methods across all
+supported OS values.
+
+Do not enable `test-helpers` in release builds of apps that ship to users — it
+is intended for test and development use only.
+
 ## Install
 
 _This plugin requires a Rust version of at least **1.94.0**_
@@ -124,12 +221,13 @@ fn main() {
 
 The plugin exposes two levels of API:
 
-1. **`PathMapping`** — a cross-platform path definition that maps each
+1. **`CrossPlatformMapping`** — a cross-platform path definition that maps each
    platform to its correct path enum variant. Define the mapping once, then
-   call `resolve()` at runtime; the current platform is detected automatically
-   and the corresponding resolve function is called. If the current platform
-   has no entry in the mapping, an error is returned. This is the recommended
-   entry point for most use cases.
+   call `resolveMapping()` (TypeScript) or `PathResolver::resolve_mapping()` (Rust) at
+   runtime; the current platform is detected automatically and the
+   corresponding resolve function is called. If the current platform has no
+   entry in the mapping, an error is returned. This is the recommended entry
+   point for most use cases.
 
 2. **Platform-specific resolve functions** — each function targets a single
    platform and accepts that platform's path enum. These are the low-level
@@ -152,10 +250,10 @@ instance for all resolution.
 **TypeScript** exposes individual async functions (`resolveIosPath`,
 `resolveMacPath`, `resolveAndroidPath`, `resolveWindowsPath`,
 `resolveAndroidPathCollection`) that each call a corresponding Tauri IPC command, plus a
-`PathMapping` class for cross-platform resolution. Because Tauri IPC can only invoke flat
-commands (not methods on a Rust struct), the TypeScript layer does not mirror the
-`PathResolver` struct directly — the individual functions are the natural binding to the
-IPC surface.
+`resolveMapping()` helper and `CrossPlatformMapping` type for cross-platform resolution.
+Because Tauri IPC can only invoke flat commands (not methods on a Rust struct), the
+TypeScript layer does not mirror the `PathResolver` struct directly — the individual
+functions are the natural binding to the IPC surface.
 
 > **Platform gating:** Both layers check the current OS before making a
 > resolve call. The TypeScript functions check `platform()` before calling
@@ -163,23 +261,39 @@ IPC surface.
 > platform. The Rust side also validates the OS, so the check is enforced
 > regardless of how the command is invoked.
 
-#### PathMapping
+#### CrossPlatformMapping
 
-Use `PathMapping` when your app targets multiple platforms and you want a
-single definition that resolves to the right directory on each one. All fields
-are optional — only provide entries for the platforms you ship on.
+Use `CrossPlatformMapping` when your app targets multiple platforms and you want a
+single definition that resolves to the right directory on each one. Each platform
+entry is a `PlatformMapping` with a required `platform_path` and an optional
+`relativePath` in TypeScript (or `relative_path` in Rust). Top-level platform
+fields are optional — only provide entries for the platforms you ship on.
 
-This is the main intended usage for this library. The goal is for
-developers to define once what the platform-specific paths should be, and the
-library will handle resolving to the path of the current OS.
+Mapping types are **not** IPC payloads. Only individual path enums cross the plugin
+boundary via the per-platform resolve commands. TypeScript `resolveMapping()` and Rust
+`PathResolver::resolve_mapping()` are parallel in-process helpers with the same
+semantics — each picks the current platform's entry, resolves the base path enum,
+then optionally joins the relative segment. The shared field name for the platform
+enum is `platform_path` on both sides; relative segments follow each language's
+casing convention (`relativePath` / `relative_path`).
 
-In other words, callers don't need to write any platform-branching logic
-themselves unless they want to.
+This is the main intended usage for this library. The goal is for developers to
+define once what the platform-specific paths should be, and the library will
+handle resolving to the path of the current OS. Callers don't need to write
+platform-branching logic themselves unless they want to.
+
+**Relative paths:** Set `relativePath` when your mapping should resolve to a
+subfolder under the platform base directory. For example, if the app always
+stores user data in a `data/` folder and the mapping should answer "what is the
+parent directory of `data/`?", set the base path enum on `platform_path` and
+`relativePath: 'data'`. The resolver joins the resolved base path with the
+relative segment (via Tauri's `join` in TypeScript, `PathBuf::join` in Rust).
 
 **JavaScript / TypeScript**
 
 ```typescript
-import { PathMapping } from '@silvermine/tauri-plugin-fs-resolver';
+import { resolveMapping } from '@silvermine/tauri-plugin-fs-resolver';
+import type { CrossPlatformMapping } from '@silvermine/tauri-plugin-fs-resolver';
 import {
    IosPath,
    MacPath,
@@ -188,53 +302,121 @@ import {
    Win32Path,
 } from '@silvermine/tauri-plugin-fs-resolver/types';
 
-const tempDir = new PathMapping({
-   android: AndroidPath.CacheDir,
-   ios: IosPath.CachesDirectory,
-   linux: LinuxPath.CacheHome,
-   macos: MacPath.CachesDirectory,
-   windows: { win32: Win32Path.LocalAppData },
-});
+const tempDir: CrossPlatformMapping = {
+   android: { platform_path: AndroidPath.CacheDir },
+   ios: { platform_path: IosPath.CachesDirectory },
+   linux: { platform_path: LinuxPath.CacheHome },
+   macos: { platform_path: MacPath.CachesDirectory },
+   windows: { platform_path: { win32: Win32Path.LocalAppData } },
+};
 
-const downloadsDir = new PathMapping({
-   ios: IosPath.DownloadsDirectory,
-   macos: MacPath.DownloadsDirectory,
-   linux: LinuxPath.DownloadDir,
-   android: AndroidPath.ExternalFilesDirectoryDownloads,
-   windows: { win32: Win32Path.Downloads },
-});
+const downloadsDir: CrossPlatformMapping = {
+   ios: { platform_path: IosPath.DownloadsDirectory },
+   macos: { platform_path: MacPath.DownloadsDirectory },
+   linux: { platform_path: LinuxPath.DownloadDir },
+   android: { platform_path: AndroidPath.ExternalFilesDirectoryDownloads },
+   windows: { platform_path: { win32: Win32Path.Downloads } },
+};
 
-// These methods are what should actually be called by the rest of the app.
+const dataDir: CrossPlatformMapping = {
+   android: { platform_path: AndroidPath.FilesDir, relativePath: 'data' },
+   ios: { platform_path: IosPath.ApplicationSupportDirectory, relativePath: 'data' },
+   linux: { platform_path: LinuxPath.DataHome, relativePath: 'data' },
+   macos: { platform_path: MacPath.ApplicationSupportDirectory, relativePath: 'data' },
+   windows: { platform_path: { win32: Win32Path.LocalAppData }, relativePath: 'data' },
+};
+
+// These functions are what should actually be called by the rest of the app.
 export async function getTempDir() {
-   return await tempDir.resolve()
+   return await resolveMapping(tempDir);
 }
 
 export async function getDownloadsDir() {
-   return await downloadsDir.resolve()
+   return await resolveMapping(downloadsDir);
+}
+
+export async function getDataDir() {
+   return await resolveMapping(dataDir);
 }
 ```
 
 **Rust**
 
 ```rust
-use fs_resolver::{PathResolver, PathMapping, IosPath, LinuxPath, MacPath, AndroidPath, WindowsPath, Win32Path, Error};
+use fs_resolver::{
+   PathResolver, CrossPlatformMapping, PlatformMapping,
+   IosPath, LinuxPath, MacPath, AndroidPath, WindowsPath, Win32Path,
+};
 
 let resolver = PathResolver::new();
 
-let temp_dir = PathMapping {
-   android: Some(AndroidPath::CacheDir),
-   ios: Some(IosPath::CachesDirectory),
-   linux: Some(LinuxPath::CacheHome),
-   macos: Some(MacPath::CachesDirectory),
-   windows: Some(WindowsPath::Win32(Win32Path::LocalAppData)),
+let temp_dir = CrossPlatformMapping {
+   android: Some(PlatformMapping {
+      platform_path: AndroidPath::CacheDir,
+      relative_path: None,
+   }),
+   ios: Some(PlatformMapping {
+      platform_path: IosPath::CachesDirectory,
+      relative_path: None,
+   }),
+   linux: Some(PlatformMapping {
+      platform_path: LinuxPath::CacheHome,
+      relative_path: None,
+   }),
+   macos: Some(PlatformMapping {
+      platform_path: MacPath::CachesDirectory,
+      relative_path: None,
+   }),
+   windows: Some(PlatformMapping {
+      platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+      relative_path: None,
+   }),
 };
 
-let downloads_dir = PathMapping {
-   android: Some(AndroidPath::ExternalFilesDirectoryDownloads),
-   ios: Some(IosPath::DownloadsDirectory),
-   linux: Some(LinuxPath::DownloadDir),
-   macos: Some(MacPath::DownloadsDirectory),
-   windows: Some(WindowsPath::Win32(Win32Path::Downloads)),
+let downloads_dir = CrossPlatformMapping {
+   android: Some(PlatformMapping {
+      platform_path: AndroidPath::ExternalFilesDirectoryDownloads,
+      relative_path: None,
+   }),
+   ios: Some(PlatformMapping {
+      platform_path: IosPath::DownloadsDirectory,
+      relative_path: None,
+   }),
+   linux: Some(PlatformMapping {
+      platform_path: LinuxPath::DownloadDir,
+      relative_path: None,
+   }),
+   macos: Some(PlatformMapping {
+      platform_path: MacPath::DownloadsDirectory,
+      relative_path: None,
+   }),
+   windows: Some(PlatformMapping {
+      platform_path: WindowsPath::Win32(Win32Path::Downloads),
+      relative_path: None,
+   }),
+};
+
+let data_dir = CrossPlatformMapping {
+   android: Some(PlatformMapping {
+      platform_path: AndroidPath::FilesDir,
+      relative_path: Some("data".to_string()),
+   }),
+   ios: Some(PlatformMapping {
+      platform_path: IosPath::ApplicationSupportDirectory,
+      relative_path: Some("data".to_string()),
+   }),
+   linux: Some(PlatformMapping {
+      platform_path: LinuxPath::DataHome,
+      relative_path: Some("data".to_string()),
+   }),
+   macos: Some(PlatformMapping {
+      platform_path: MacPath::ApplicationSupportDirectory,
+      relative_path: Some("data".to_string()),
+   }),
+   windows: Some(PlatformMapping {
+      platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+      relative_path: Some("data".to_string()),
+   }),
 };
 
 // These methods are what should actually be called by the rest of the app.
@@ -245,12 +427,16 @@ pub fn temp_dir() -> Result<PathBuf> {
 pub fn downloads_dir() -> Result<PathBuf> {
    resolver.resolve_mapping(&downloads_dir)
 }
+
+pub fn data_dir() -> Result<PathBuf> {
+   resolver.resolve_mapping(&data_dir)
+}
 ```
 
 #### Platform-specific resolve functions
 
 For cases where you only need a single platform, or need finer control than
-`PathMapping` provides (e.g. resolving a path collection on Android), use the
+`CrossPlatformMapping` provides (e.g. resolving a path collection on Android), use the
 resolve functions directly.
 
 **JavaScript / TypeScript**
