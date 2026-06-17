@@ -3,10 +3,10 @@ use crate::error::Result;
 use crate::mac_paths::MacPath;
 use std::path::PathBuf;
 
-pub(crate) fn resolve_mac_path(path: &MacPath) -> Result<PathBuf> {
+pub(crate) fn resolve_mac_path(path: &MacPath, _bundle_identifier: &str) -> Result<PathBuf> {
    #[cfg(target_os = "macos")]
    {
-      resolve_mac_path_inner(path)
+      resolve_mac_path_inner(path, _bundle_identifier)
    }
 
    #[cfg(not(target_os = "macos"))]
@@ -20,7 +20,7 @@ pub(crate) fn resolve_mac_path(path: &MacPath) -> Result<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn resolve_mac_path_inner(path: &MacPath) -> Result<PathBuf> {
+pub(crate) fn resolve_mac_path_inner(path: &MacPath, bundle_identifier: &str) -> Result<PathBuf> {
    use objc2_foundation::{
       NSSearchPathDirectory, NSSearchPathDomainMask, NSSearchPathForDirectoriesInDomains,
    };
@@ -169,5 +169,45 @@ pub(crate) fn resolve_mac_path_inner(path: &MacPath) -> Result<PathBuf> {
       MacPath::TrashDirectory => {
          resolve_search_path_directory(NSSearchPathDirectory::TrashDirectory)
       }
+
+      // Per-app Application Support directory.
+      MacPath::ApplicationSupportDirectoryForCurrentApp => {
+         let app_support_directory =
+            resolve_search_path_directory(NSSearchPathDirectory::ApplicationSupportDirectory)?;
+         Ok(app_support_directory.join(bundle_identifier))
+      }
+
+      // Per-app Caches directory.
+      MacPath::CachesDirectoryForCurrentApp => {
+         let caches_directory =
+            resolve_search_path_directory(NSSearchPathDirectory::CachesDirectory)?;
+         Ok(caches_directory.join(bundle_identifier))
+      }
+   }
+}
+
+#[cfg(target_os = "macos")]
+#[cfg(test)]
+// Platform-specific resolution tests; CI runs these on macos-latest (see .github/workflows/ci.yml).
+mod tests {
+   use super::*;
+   const BUNDLE_ID: &str = "com.example.app";
+
+   #[test]
+   fn caches_directory_for_current_app_appends_bundle_identifier() {
+      let base = resolve_mac_path(&MacPath::CachesDirectory, "").unwrap();
+      let path = resolve_mac_path(&MacPath::CachesDirectoryForCurrentApp, BUNDLE_ID).unwrap();
+      assert_eq!(path, base.join(BUNDLE_ID));
+   }
+
+   #[test]
+   fn application_support_directory_for_current_app_appends_bundle_identifier() {
+      let base = resolve_mac_path(&MacPath::ApplicationSupportDirectory, "").unwrap();
+      let path = resolve_mac_path(
+         &MacPath::ApplicationSupportDirectoryForCurrentApp,
+         BUNDLE_ID,
+      )
+      .unwrap();
+      assert_eq!(path, base.join(BUNDLE_ID));
    }
 }

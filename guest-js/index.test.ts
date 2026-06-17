@@ -105,6 +105,15 @@ describe('fs-resolver actions map to Tauri commands', () => {
       expect(resolvedPath).toBe(resolvedLinuxPath);
    });
 
+   it('resolveLinuxPath — supports ForCurrentApp variants', async () => {
+      mockPlatform = 'linux';
+      const resolvedPath = await resolveLinuxPath(LinuxPath.DataHomeForCurrentApp);
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_linux_path');
+      expect(lastArgs.path).toBe(LinuxPath.DataHomeForCurrentApp);
+      expect(resolvedPath).toBe(resolvedLinuxPath);
+   });
+
    it('resolveMacPath — sends path, returns resolved path', async () => {
       mockPlatform = 'macos';
       const resolvedPath = await resolveMacPath(MacPath.CachesDirectory);
@@ -114,12 +123,30 @@ describe('fs-resolver actions map to Tauri commands', () => {
       expect(resolvedPath).toBe(resolvedMacPath);
    });
 
+   it('resolveMacPath — supports ForCurrentApp variants', async () => {
+      mockPlatform = 'macos';
+      const resolvedPath = await resolveMacPath(MacPath.ApplicationSupportDirectoryForCurrentApp);
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_mac_path');
+      expect(lastArgs.path).toBe(MacPath.ApplicationSupportDirectoryForCurrentApp);
+      expect(resolvedPath).toBe(resolvedMacPath);
+   });
+
    it('resolveWindowsPath — sends Win32 path, returns resolved path', async () => {
       mockPlatform = 'windows';
       const resolvedPath = await resolveWindowsPath({ win32: Win32Path.LocalAppData });
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_path');
       expect(lastArgs.path).toEqual({ win32: Win32Path.LocalAppData });
+      expect(resolvedPath).toBe(resolvedWin32Path);
+   });
+
+   it('resolveWindowsPath — supports Win32 ForCurrentApp variants', async () => {
+      mockPlatform = 'windows';
+      const resolvedPath = await resolveWindowsPath({ win32: Win32Path.RoamingAppDataForCurrentApp });
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_path');
+      expect(lastArgs.path).toEqual({ win32: Win32Path.RoamingAppDataForCurrentApp });
       expect(resolvedPath).toBe(resolvedWin32Path);
    });
 

@@ -42,9 +42,9 @@ describe('fs-resolver actions map to Tauri commands', () => {
       const pathMapping: CrossPlatformMapping = {
          android: { platform_path: AndroidPath.DataDir },
          ios: { platform_path: IosPath.CachesDirectory },
-         linux: { platform_path: LinuxPath.DataHome },
-         macos: { platform_path: MacPath.CachesDirectory },
-         windows: { platform_path: { win32: Win32Path.LocalAppData } },
+         linux: { platform_path: LinuxPath.DataHomeForCurrentApp },
+         macos: { platform_path: MacPath.ApplicationSupportDirectoryForCurrentApp },
+         windows: { platform_path: { win32: Win32Path.RoamingAppDataForCurrentApp } },
       };
 
       mockPlatform = 'android';

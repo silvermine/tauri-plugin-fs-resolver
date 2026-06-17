@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::ios_paths::IosPath;
-use crate::path_mapping::validate_relative_path;
+use crate::path_mapping::{validate_bundle_identifier, validate_relative_path};
 use crate::{AndroidPathCollection, CrossPlatformMapping, Error, LinuxPath};
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -27,15 +27,13 @@ pub struct PathResolver {
    resolve_windows: WindowsPathResolver,
 }
 
-impl Default for PathResolver {
-   fn default() -> Self {
-      Self::new()
-   }
-}
-
 impl PathResolver {
-   pub fn new() -> Self {
-      Self {
+   pub fn new(bundle_identifier: String) -> Result<Self> {
+      validate_bundle_identifier(&bundle_identifier)?;
+      let linux_bundle_identifier = bundle_identifier.clone();
+      let mac_bundle_identifier = bundle_identifier.clone();
+      let win32_bundle_identifier = bundle_identifier;
+      Ok(Self {
          os: std::env::consts::OS.to_string(),
          resolve_android: Box::new(|_| Err(Error::AndroidPathResolutionNotConfigured)),
          resolve_android_path_collection: Box::new(|_| {
@@ -44,16 +42,21 @@ impl PathResolver {
          resolve_ios: Box::new(|path: &IosPath| -> Result<PathBuf> {
             crate::ios_resolve::resolve_ios_path(path)
          }),
-         resolve_linux: Box::new(|path: &LinuxPath| -> Result<PathBuf> {
-            crate::linux_resolve::resolve_linux_path(path)
+         resolve_linux: Box::new(move |path: &LinuxPath| -> Result<PathBuf> {
+            crate::linux_resolve::resolve_linux_path(path, &linux_bundle_identifier)
          }),
-         resolve_mac: Box::new(|path: &MacPath| -> Result<PathBuf> {
-            crate::mac_resolve::resolve_mac_path(path)
+         resolve_mac: Box::new(move |path: &MacPath| -> Result<PathBuf> {
+            crate::mac_resolve::resolve_mac_path(path, &mac_bundle_identifier)
          }),
-         resolve_windows: Box::new(|path: &WindowsPath| -> Result<PathBuf> {
-            crate::windows_resolve::resolve_windows_path(path)
+         resolve_windows: Box::new(move |path: &WindowsPath| -> Result<PathBuf> {
+            match path {
+               WindowsPath::Win32(path) => {
+                  crate::windows_resolve::resolve_win32_path(path, &win32_bundle_identifier)
+               }
+               WindowsPath::WinMsix(path) => crate::windows_resolve::resolve_win_msix_path(path),
+            }
          }),
-      }
+      })
    }
 
    pub fn configure_android_path_resolution(
@@ -214,6 +217,12 @@ mod tests {
    use crate::Win32Path;
 
    const KNOWN_OS: [&str; 5] = ["ios", "macos", "android", "windows", "linux"];
+
+   #[test]
+   fn new_rejects_invalid_bundle_identifier() {
+      assert!(PathResolver::new(String::new()).is_err());
+      assert!(PathResolver::new("../escape".to_string()).is_err());
+   }
 
    #[test]
    fn resolve_handles_invoking_os() {

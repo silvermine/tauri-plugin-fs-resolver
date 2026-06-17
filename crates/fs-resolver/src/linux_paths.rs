@@ -5,8 +5,9 @@ use std::fmt::Display;
 // https://specifications.freedesktop.org/basedir-spec/latest/
 // https://www.freedesktop.org/wiki/Software/xdg-user-dirs/
 //
-// The resolver returns base directories; callers append their app identifier
-// (e.g. `DataHome` → `~/.local/share/`, app appends `<app-id>/`).
+// Base-directory variants return shared XDG roots; callers may append their app
+// identifier (e.g. `DataHome` → `~/.local/share/`, then `<app-id>/`).
+// `*ForCurrentApp` variants append the bundle identifier automatically.
 // Flatpak/Snap runtimes automatically remap these XDG vars to sandbox paths.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -15,17 +16,38 @@ pub enum LinuxPath {
    // $XDG_DATA_HOME (~/.local/share)
    DataHome,
 
+   // Per-app data directory. XDG spec: each app creates its own subdirectory
+   // under the shared data home (Tauri app_data_dir).
+   // $XDG_DATA_HOME/<app-id>
+   // https://specifications.freedesktop.org/basedir-spec/latest/#variables
+   DataHomeForCurrentApp,
+
    // App-specific configuration files.
    // $XDG_CONFIG_HOME (~/.config)
    ConfigHome,
+
+   // Per-app configuration directory (Tauri app_config_dir).
+   // $XDG_CONFIG_HOME/<app-id>
+   // https://specifications.freedesktop.org/basedir-spec/latest/#variables
+   ConfigHomeForCurrentApp,
 
    // Disposable cache data (safe to delete).
    // $XDG_CACHE_HOME (~/.cache)
    CacheHome,
 
+   // Per-app cache directory (Tauri app_cache_dir).
+   // $XDG_CACHE_HOME/<app-id>
+   // https://specifications.freedesktop.org/basedir-spec/latest/#variables
+   CacheHomeForCurrentApp,
+
    // Non-portable state: logs, undo history, session state.
    // $XDG_STATE_HOME (~/.local/state)
    StateHome,
+
+   // Per-app state directory for logs, history, and session data.
+   // $XDG_STATE_HOME/<app-id>
+   // https://specifications.freedesktop.org/basedir-spec/latest/#variables
+   StateHomeForCurrentApp,
 
    // Ephemeral runtime files: sockets, named pipes. Lifetime bound to login session.
    // $XDG_RUNTIME_DIR (/run/user/<uid>, set by pam/systemd; no fallback)
@@ -74,9 +96,13 @@ impl Display for LinuxPath {
    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       match self {
          LinuxPath::DataHome => write!(f, "dataHome"),
+         LinuxPath::DataHomeForCurrentApp => write!(f, "dataHomeForCurrentApp"),
          LinuxPath::ConfigHome => write!(f, "configHome"),
+         LinuxPath::ConfigHomeForCurrentApp => write!(f, "configHomeForCurrentApp"),
          LinuxPath::CacheHome => write!(f, "cacheHome"),
+         LinuxPath::CacheHomeForCurrentApp => write!(f, "cacheHomeForCurrentApp"),
          LinuxPath::StateHome => write!(f, "stateHome"),
+         LinuxPath::StateHomeForCurrentApp => write!(f, "stateHomeForCurrentApp"),
          LinuxPath::RuntimeDir => write!(f, "runtimeDir"),
          LinuxPath::Home => write!(f, "home"),
          LinuxPath::ExecutableDir => write!(f, "executableDir"),

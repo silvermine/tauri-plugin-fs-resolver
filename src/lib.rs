@@ -16,7 +16,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       .setup(|app, _api| {
 
          #[allow(unused_mut)]
-         let mut resolver = PathResolver::new();
+         let mut resolver = PathResolver::new(
+            app.config().identifier.clone(),
+         )?;
          #[cfg(target_os = "android")]
          {
             android_resolution::configure_android_path_resolution(&_api, &mut resolver)?;

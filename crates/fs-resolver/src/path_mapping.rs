@@ -65,6 +65,24 @@ pub fn validate_relative_path(relative_path: &str) -> Result<()> {
    Ok(())
 }
 
+/// Validates that `bundle_identifier` is safe to append as a single path segment.
+///
+/// Rejects empty identifiers, path separators, `.`, `..`, and absolute paths so
+/// `PathBuf::join` cannot silently return the shared base directory or escape it.
+pub fn validate_bundle_identifier(bundle_identifier: &str) -> Result<()> {
+   if bundle_identifier.contains('/') || bundle_identifier.contains('\\') {
+      return Err(Error::InvalidPath(format!(
+         "Bundle identifier must be a single safe path segment: {bundle_identifier}"
+      )));
+   }
+
+   validate_relative_path(bundle_identifier).map_err(|_| {
+      Error::InvalidPath(format!(
+         "Bundle identifier must be a single safe path segment: {bundle_identifier}"
+      ))
+   })
+}
+
 // This is a marker to ensure that PlatformMapping can only be instantiated with a type
 // that is defined in this module.
 pub trait PlatformPath: private::Sealed {}
@@ -108,6 +126,22 @@ mod tests {
       assert!(
          validate_relative_path(segment).is_err(),
          "expected {segment} to be rejected"
+      );
+   }
+
+   #[test_case("com.example.app")]
+   fn validate_bundle_identifier_accepts_valid_ids(id: &str) {
+      validate_bundle_identifier(id).unwrap();
+   }
+
+   #[test_case("" ; "empty")]
+   #[test_case(".." ; "parent segment")]
+   #[test_case("/absolute" ; "absolute path")]
+   #[test_case("com/example" ; "path separator")]
+   fn validate_bundle_identifier_rejects_invalid_ids(id: &str) {
+      assert!(
+         validate_bundle_identifier(id).is_err(),
+         "expected {id} to be rejected"
       );
    }
 }
