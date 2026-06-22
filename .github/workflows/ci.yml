@@ -9,8 +9,8 @@ env:
    CARGO_TERM_COLOR: always
 
 jobs:
-   ci:
-      name: Continuous Integration
+   standards:
+      name: Standards and checks
       runs-on: ubuntu-latest
 
       steps:
@@ -59,5 +59,33 @@ jobs:
          - name: Run cargo check
            run: cargo check --workspace --all-targets
 
-         - name: Run TypeScript and Rust tests
-           run: npm test
+         - name: Run TypeScript tests
+           run: npm run test:ts
+
+         - name: Run Rust tests
+           run: cargo test -p fs-resolver --lib
+
+   # These tests are only run on macOS and Windows because they require native
+   # dependencies.
+   # Tests for Linux-specific features are run in the `standards` job, since the build
+   # agents themeselves are Linux-based.
+   platform-specific-rust-tests:
+      name: Platform-specific Rust tests (${{ matrix.os }})
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            os: [macos-latest, windows-latest]
+
+      steps:
+         - name: Checkout repository
+           uses: actions/checkout@v4
+
+         - name: Setup Rust toolchain
+           uses: actions-rust-lang/setup-rust-toolchain@v1
+           with:
+              toolchain: '1.94.0'
+              cache: true
+
+         - name: Run Rust tests
+           run: cargo test -p fs-resolver --lib
