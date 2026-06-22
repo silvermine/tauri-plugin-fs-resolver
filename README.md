@@ -244,8 +244,8 @@ string, holds the platform-specific resolve functions, and provides methods
 for both cross-platform mapping resolution (`resolve_mapping`) and direct
 per-platform resolution (`resolve_ios`, `resolve_mac`, `resolve_android`,
 `resolve_windows`, `resolve_android_path_collection`). Callers construct it
-once with `PathResolver::new()` — no arguments needed — and use that
-instance for all resolution.
+once with `PathResolver::new(bundle_identifier)?` (typically Tauri's
+`config().identifier`) and use that instance for all resolution.
 
 **TypeScript** exposes individual async functions (`resolveIosPath`,
 `resolveMacPath`, `resolveAndroidPath`, `resolveWindowsPath`,
@@ -305,9 +305,9 @@ import {
 const tempDir: CrossPlatformMapping = {
    android: { platform_path: AndroidPath.CacheDir },
    ios: { platform_path: IosPath.CachesDirectory },
-   linux: { platform_path: LinuxPath.CacheHome },
+   linux: { platform_path: LinuxPath.CacheHomeForCurrentApp },
    macos: { platform_path: MacPath.CachesDirectory },
-   windows: { platform_path: { win32: Win32Path.LocalAppData } },
+   windows: { platform_path: { win32: Win32Path.LocalAppDataForCurrentApp } },
 };
 
 const downloadsDir: CrossPlatformMapping = {
@@ -321,9 +321,9 @@ const downloadsDir: CrossPlatformMapping = {
 const dataDir: CrossPlatformMapping = {
    android: { platform_path: AndroidPath.FilesDir, relativePath: 'data' },
    ios: { platform_path: IosPath.ApplicationSupportDirectory, relativePath: 'data' },
-   linux: { platform_path: LinuxPath.DataHome, relativePath: 'data' },
-   macos: { platform_path: MacPath.ApplicationSupportDirectory, relativePath: 'data' },
-   windows: { platform_path: { win32: Win32Path.LocalAppData }, relativePath: 'data' },
+   linux: { platform_path: LinuxPath.DataHomeForCurrentApp, relativePath: 'data' },
+   macos: { platform_path: MacPath.ApplicationSupportDirectoryForCurrentApp, relativePath: 'data' },
+   windows: { platform_path: { win32: Win32Path.LocalAppDataForCurrentApp }, relativePath: 'data' },
 };
 
 // These functions are what should actually be called by the rest of the app.
@@ -348,7 +348,7 @@ use fs_resolver::{
    IosPath, LinuxPath, MacPath, AndroidPath, WindowsPath, Win32Path,
 };
 
-let resolver = PathResolver::new();
+let resolver = PathResolver::new("com.example.app".to_string())?;
 
 let temp_dir = CrossPlatformMapping {
    android: Some(PlatformMapping {
@@ -360,7 +360,7 @@ let temp_dir = CrossPlatformMapping {
       relative_path: None,
    }),
    linux: Some(PlatformMapping {
-      platform_path: LinuxPath::CacheHome,
+      platform_path: LinuxPath::CacheHomeForCurrentApp,
       relative_path: None,
    }),
    macos: Some(PlatformMapping {
@@ -368,7 +368,7 @@ let temp_dir = CrossPlatformMapping {
       relative_path: None,
    }),
    windows: Some(PlatformMapping {
-      platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+      platform_path: WindowsPath::Win32(Win32Path::LocalAppDataForCurrentApp),
       relative_path: None,
    }),
 };
@@ -406,15 +406,15 @@ let data_dir = CrossPlatformMapping {
       relative_path: Some("data".to_string()),
    }),
    linux: Some(PlatformMapping {
-      platform_path: LinuxPath::DataHome,
+      platform_path: LinuxPath::DataHomeForCurrentApp,
       relative_path: Some("data".to_string()),
    }),
    macos: Some(PlatformMapping {
-      platform_path: MacPath::ApplicationSupportDirectory,
+      platform_path: MacPath::ApplicationSupportDirectoryForCurrentApp,
       relative_path: Some("data".to_string()),
    }),
    windows: Some(PlatformMapping {
-      platform_path: WindowsPath::Win32(Win32Path::LocalAppData),
+      platform_path: WindowsPath::Win32(Win32Path::LocalAppDataForCurrentApp),
       relative_path: Some("data".to_string()),
    }),
 };
@@ -484,8 +484,8 @@ const downloads = await resolveIosPath(IosPath.DownloadsDirectory);
 import { resolveLinuxPath } from '@silvermine/tauri-plugin-fs-resolver';
 import { LinuxPath } from '@silvermine/tauri-plugin-fs-resolver/types';
 
-const data = await resolveLinuxPath(LinuxPath.DataHome);
-const caches = await resolveLinuxPath(LinuxPath.CacheHome);
+const data = await resolveLinuxPath(LinuxPath.DataHomeForCurrentApp);
+const caches = await resolveLinuxPath(LinuxPath.CacheHomeForCurrentApp);
 const documents = await resolveLinuxPath(LinuxPath.DocumentDir);
 const downloads = await resolveLinuxPath(LinuxPath.DownloadDir);
 ```
@@ -496,8 +496,8 @@ import { resolveMacPath } from '@silvermine/tauri-plugin-fs-resolver';
 import { MacPath } from '@silvermine/tauri-plugin-fs-resolver/types';
 
 const library = await resolveMacPath(MacPath.LibraryDirectory);
-const appSupport = await resolveMacPath(MacPath.ApplicationSupportDirectory);
-const caches = await resolveMacPath(MacPath.CachesDirectory);
+const appSupport = await resolveMacPath(MacPath.ApplicationSupportDirectoryForCurrentApp);
+const caches = await resolveMacPath(MacPath.CachesDirectoryForCurrentApp);
 const documents = await resolveMacPath(MacPath.DocumentDirectory);
 const downloads = await resolveMacPath(MacPath.DownloadsDirectory);
 ```
@@ -507,8 +507,8 @@ const downloads = await resolveMacPath(MacPath.DownloadsDirectory);
 import { resolveWindowsPath } from '@silvermine/tauri-plugin-fs-resolver';
 import { Win32Path } from '@silvermine/tauri-plugin-fs-resolver/types';
 
-const appData = await resolveWindowsPath({ win32: Win32Path.RoamingAppData });
-const localAppData = await resolveWindowsPath({ win32: Win32Path.LocalAppData });
+const appData = await resolveWindowsPath({ win32: Win32Path.RoamingAppDataForCurrentApp });
+const localAppData = await resolveWindowsPath({ win32: Win32Path.LocalAppDataForCurrentApp });
 const documents = await resolveWindowsPath({ win32: Win32Path.Documents });
 ```
 
@@ -530,7 +530,7 @@ that the current OS matches the target platform and returns `Result<PathBuf>`.
 ```rust
 use fs_resolver::{PathResolver, AndroidPath, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath, WindowsPath};
 
-let resolver = PathResolver::new();
+let resolver = PathResolver::new("com.example.app".to_string())?;
 
 // Android
 let cache = resolver.resolve_android(&AndroidPath::CacheDir)?;
@@ -542,16 +542,16 @@ let app_support = resolver.resolve_ios(&IosPath::ApplicationSupportDirectory)?;
 let caches = resolver.resolve_ios(&IosPath::CachesDirectory)?;
 
 // Linux
-let config = resolver.resolve_linux(&LinuxPath::ConfigHome)?;
+let config = resolver.resolve_linux(&LinuxPath::ConfigHomeForCurrentApp)?;
 let desktop = resolver.resolve_linux(&LinuxPath::DesktopDir)?;
 
 // MacOS
 let library = resolver.resolve_mac(&MacPath::LibraryDirectory)?;
-let app_support = resolver.resolve_mac(&MacPath::ApplicationSupportDirectory)?;
-let caches = resolver.resolve_mac(&MacPath::CachesDirectory)?;
+let app_support = resolver.resolve_mac(&MacPath::ApplicationSupportDirectoryForCurrentApp)?;
+let caches = resolver.resolve_mac(&MacPath::CachesDirectoryForCurrentApp)?;
 
 // Windows (Win32 / MSI)
-let app_data = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::RoamingAppData))?;
+let app_data = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::RoamingAppDataForCurrentApp))?;
 let documents = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::Documents))?;
 
 // Windows (MSIX)
@@ -561,13 +561,13 @@ let temp_folder = resolver.resolve_windows(&WindowsPath::WinMsix(WindowsApplicat
 
 ### Implementation
 
-| Platform | Resolution strategy |
-|----------|---------------------|
-| macOS    | Native calls via `objc2-foundation` |
-| iOS      | Native calls via `objc2-foundation` |
-| Linux    | Rust `std::env` and XDG conventions |
+| Platform | Resolution strategy                                              |
+|----------|------------------------------------------------------------------|
+| macOS    | Native calls via `objc2-foundation`                              |
+| iOS      | Native calls via `objc2-foundation`                              |
+| Linux    | Rust `std::env` and XDG conventions                              |
 | Windows  | `SHGetKnownFolderPath` (Win32) or WinRT `ApplicationData` (MSIX) |
-| Android  | JNI bridge to Kotlin via Tauri `PluginHandle` |
+| Android  | JNI bridge to Kotlin via Tauri `PluginHandle`                    |
 
 On all platforms except Android, paths are resolved directly in Rust
 using native bindings or standard library APIs. No Tauri dependency is
@@ -646,12 +646,43 @@ Linux path resolution follows the [XDG Base Directory
 Specification](https://specifications.freedesktop.org/basedir-spec/latest/) and
 [XDG User Directories](https://www.freedesktop.org/wiki/Software/xdg-user-dirs/).
 
-`LinuxPath` returns **base directories**, not app-specific paths. Append your
-app identifier after resolution (e.g. `DataHome` → `~/.local/share/<app-id>/`).
+#### Desktop app-scoped directories
+
+On desktop platforms, `*ForCurrentApp` variants append your app identifier
+(Tauri `config().identifier`) to the shared base directory, matching Tauri's
+`app_data_dir`, `app_config_dir`, and `app_cache_dir` behavior where each
+variant maps to the corresponding base (for example, Windows
+`LocalAppDataForCurrentApp` matches `app_local_data_dir`; Tauri's
+`app_cache_dir` is `<app-id>/cache` under that base).
+
+1. **macOS:** `MacPath::ApplicationSupportDirectoryForCurrentApp` resolves to
+   `~/Library/Application Support/<bundle-id>` and
+   `MacPath::CachesDirectoryForCurrentApp` resolves to `~/Library/Caches/<bundle-id>`.
+   Source: Apple's `SearchPathDirectory` documentation
+   ([ApplicationSupportDirectory][apple-app-support-dir],
+   [CachesDirectory][apple-caches-dir]).
+1. **Linux:** `LinuxPath::*ForCurrentApp` variants resolve to
+   `$XDG_{DATA,CONFIG,CACHE,STATE}_HOME/<app-id>`, per the XDG Base Directory spec
+   ([variables][xdg-variables]).
+1. **Windows (Win32 / MSI):** `Win32Path::{RoamingAppData,LocalAppData}ForCurrentApp`
+   resolve to `%APPDATA%/<app-id>` and `%LOCALAPPDATA%/<app-id>`, using KNOWNFOLDERID
+   ([Known Folder IDs][win32-known-folder-ids]).
+
+<!-- markdownlint-disable MD013 -->
+[apple-app-support-dir]: https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/applicationsupportdirectory
+[apple-caches-dir]: https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/cachesdirectory
+[xdg-variables]: https://specifications.freedesktop.org/basedir-spec/latest/#variables
+[win32-known-folder-ids]: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+<!-- markdownlint-enable MD013 -->
+
+`LinuxPath` base variants return shared XDG roots (e.g. `DataHome` → `~/.local/share`).
+If you want an app-specific directory, use the `*ForCurrentApp` variants (e.g.
+`DataHomeForCurrentApp` → `~/.local/share/<app-id>`), or append your identifier
+manually.
 
 | Category | Variants | Source |
 | -------- | -------- | ------ |
-| XDG base | `DataHome`, `ConfigHome`, `CacheHome`, `StateHome`, `RuntimeDir`, `Home`, `ExecutableDir`, `FontDir` | `$XDG_*` env vars with spec-defined fallbacks |
+| XDG base | `DataHome`, `DataHomeForCurrentApp`, `ConfigHome`, `ConfigHomeForCurrentApp`, `CacheHome`, `CacheHomeForCurrentApp`, `StateHome`, `StateHomeForCurrentApp`, `RuntimeDir`, `Home`, `ExecutableDir`, `FontDir` | `$XDG_*` env vars with spec-defined fallbacks |
 | User dirs | `DesktopDir`, `DocumentDir`, `DownloadDir`, `MusicDir`, `PictureDir`, `VideoDir`, `TemplateDir`, `PublicDir` | `~/.config/user-dirs.dirs` |
 
 `RuntimeDir` (`$XDG_RUNTIME_DIR`) has no fallback — it must be set by
@@ -682,6 +713,15 @@ npm run example:dev:ios
 npm run example:init:android   # first time only
 npm run example:dev:android
 ```
+
+#### Known Linux Issue
+
+On some Linux devices (e.g. Raspberry Pi), the example window may show WebKit
+GPU corruption (blurry or static-like UI). Set `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+when running the dev server. See
+[Linux (GTK / WebKit rendering)](examples/tauri-app/README.md#linux-gtk--webkit-rendering)
+in the example app README for fallbacks and how to export the variable in your
+shell.
 
 #### Windows MSIX testing
 

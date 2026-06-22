@@ -137,6 +137,11 @@ pub enum Win32Path {
    // %LOCALAPPDATA% (%USERPROFILE%\AppData\Local)
    LocalAppData,
 
+   // Per-app local data directory.
+   // %LOCALAPPDATA%/<app-id>
+   // https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+   LocalAppDataForCurrentApp,
+
    // Per-user low-integrity application data.
    // %USERPROFILE%\AppData\LocalLow
    LocalAppDataLow,
@@ -288,6 +293,11 @@ pub enum Win32Path {
    // Per-user roaming application data.
    // %APPDATA% (%USERPROFILE%\AppData\Roaming)
    RoamingAppData,
+
+   // Per-app roaming data directory.
+   // %APPDATA%/<app-id>
+   // https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+   RoamingAppDataForCurrentApp,
 
    // Roamed tile images for Start.
    // %LOCALAPPDATA%\Microsoft\Windows\RoamedTileImages
@@ -448,6 +458,7 @@ impl Display for Win32Path {
          Win32Path::Libraries => write!(f, "libraries"),
          Win32Path::Links => write!(f, "links"),
          Win32Path::LocalAppData => write!(f, "localAppData"),
+         Win32Path::LocalAppDataForCurrentApp => write!(f, "localAppDataForCurrentApp"),
          Win32Path::LocalAppDataLow => write!(f, "localAppDataLow"),
          Win32Path::LocalizedResourcesDir => write!(f, "localizedResourcesDir"),
          Win32Path::Music => write!(f, "music"),
@@ -486,6 +497,7 @@ impl Display for Win32Path {
          Win32Path::ResourceDir => write!(f, "resourceDir"),
          Win32Path::Ringtones => write!(f, "ringtones"),
          Win32Path::RoamingAppData => write!(f, "roamingAppData"),
+         Win32Path::RoamingAppDataForCurrentApp => write!(f, "roamingAppDataForCurrentApp"),
          Win32Path::RoamedTileImages => write!(f, "roamedTileImages"),
          Win32Path::RoamingTiles => write!(f, "roamingTiles"),
          Win32Path::SampleMusic => write!(f, "sampleMusic"),

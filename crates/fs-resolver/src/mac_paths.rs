@@ -113,6 +113,20 @@ pub enum MacPath {
    // The trash directory.
    // ~/.Trash
    TrashDirectory,
+
+   // Per-app persistent data directory under Application Support.
+   // macOS convention (and Tauri app_data_dir / app_config_dir): each app stores
+   // support files in a subdirectory named after its bundle identifier.
+   // ~/Library/Application Support/<bundle-id>
+   // https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/applicationsupportdirectory
+   // https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+   ApplicationSupportDirectoryForCurrentApp,
+
+   // Per-app discardable cache directory under the shared Caches folder.
+   // Tauri app_cache_dir appends the bundle identifier to ~/Library/Caches.
+   // ~/Library/Caches/<bundle-id>
+   // https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/cachesdirectory
+   CachesDirectoryForCurrentApp,
 }
 
 impl Display for MacPath {
@@ -145,6 +159,10 @@ impl Display for MacPath {
          MacPath::AllApplicationsDirectory => write!(f, "allApplicationsDirectory"),
          MacPath::AllLibrariesDirectory => write!(f, "allLibrariesDirectory"),
          MacPath::TrashDirectory => write!(f, "trashDirectory"),
+         MacPath::ApplicationSupportDirectoryForCurrentApp => {
+            write!(f, "applicationSupportDirectoryForCurrentApp")
+         }
+         MacPath::CachesDirectoryForCurrentApp => write!(f, "cachesDirectoryForCurrentApp"),
       }
    }
 }

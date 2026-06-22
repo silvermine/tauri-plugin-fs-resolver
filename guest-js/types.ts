@@ -198,7 +198,8 @@ export enum IosPath {
  * Linux XDG directory paths.
  *
  * Returns base directories per the XDG Base Directory Specification.
- * Apps should append their own identifier (e.g. `DataHome` + `/<app-id>/`).
+ * Apps may append their own identifier (e.g. `DataHome` + `/<app-id>/`).
+ * `*ForCurrentApp` variants append the bundle identifier automatically.
  * Flatpak/Snap runtimes automatically remap XDG vars to sandbox paths.
  *
  * @see https://specifications.freedesktop.org/basedir-spec/latest/
@@ -211,20 +212,48 @@ export enum LinuxPath {
     */
    DataHome = 'dataHome',
 
+   /** Per-app data directory (Tauri app_data_dir).
+    * `$XDG_DATA_HOME/<app-id>`
+    *
+    * @see https://specifications.freedesktop.org/basedir-spec/latest/#variables
+    */
+   DataHomeForCurrentApp = 'dataHomeForCurrentApp',
+
    /** App-specific configuration files.
     * `$XDG_CONFIG_HOME` (`~/.config`)
     */
    ConfigHome = 'configHome',
+
+   /** Per-app configuration directory (Tauri app_config_dir).
+    * `$XDG_CONFIG_HOME/<app-id>`
+    *
+    * @see https://specifications.freedesktop.org/basedir-spec/latest/#variables
+    */
+   ConfigHomeForCurrentApp = 'configHomeForCurrentApp',
 
    /** Disposable cache data (safe to delete).
     * `$XDG_CACHE_HOME` (`~/.cache`)
     */
    CacheHome = 'cacheHome',
 
+   /** Per-app cache directory (Tauri app_cache_dir).
+    * `$XDG_CACHE_HOME/<app-id>`
+    *
+    * @see https://specifications.freedesktop.org/basedir-spec/latest/#variables
+    */
+   CacheHomeForCurrentApp = 'cacheHomeForCurrentApp',
+
    /** Non-portable state: logs, undo history, session state.
     * `$XDG_STATE_HOME` (`~/.local/state`)
     */
    StateHome = 'stateHome',
+
+   /** Per-app state directory for logs, history, and session data.
+    * `$XDG_STATE_HOME/<app-id>`
+    *
+    * @see https://specifications.freedesktop.org/basedir-spec/latest/#variables
+    */
+   StateHomeForCurrentApp = 'stateHomeForCurrentApp',
 
    /** Ephemeral runtime files: sockets, named pipes. Lifetime bound to login session.
     * `$XDG_RUNTIME_DIR` (`/run/user/<uid>`, set by pam/systemd; no fallback)
@@ -348,6 +377,21 @@ export enum MacPath {
     * `~/Library/Application Support`
     */
    ApplicationSupportDirectory = 'applicationSupportDirectory',
+
+   /** Per-app persistent data directory under Application Support.
+    * `~/Library/Application Support/<bundle-id>`
+    *
+    * @see https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/applicationsupportdirectory
+    * @see https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+    */
+   ApplicationSupportDirectoryForCurrentApp = 'applicationSupportDirectoryForCurrentApp',
+
+   /** Per-app discardable cache directory under the shared Caches folder.
+    * `~/Library/Caches/<bundle-id>`
+    *
+    * @see https://developer.apple.com/documentation/foundation/filemanager/searchpathdirectory/cachesdirectory
+    */
+   CachesDirectoryForCurrentApp = 'cachesDirectoryForCurrentApp',
 
    /** The user's downloads directory.
     * `~/Downloads`
@@ -567,6 +611,13 @@ export enum Win32Path {
     */
    LocalAppData = 'localAppData',
 
+   /** Per-app local data directory (Tauri app_local_data_dir).
+    * `%LOCALAPPDATA%/<app-id>`
+    *
+    * @see https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+    */
+   LocalAppDataForCurrentApp = 'localAppDataForCurrentApp',
+
    /** Per-user low-integrity application data.
     * `%USERPROFILE%\AppData\LocalLow`
     */
@@ -756,6 +807,13 @@ export enum Win32Path {
     * `%APPDATA% (%USERPROFILE%\AppData\Roaming)`
     */
    RoamingAppData = 'roamingAppData',
+
+   /** Per-app roaming data directory (Tauri app_data_dir / app_config_dir).
+    * `%APPDATA%/<app-id>`
+    *
+    * @see https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+    */
+   RoamingAppDataForCurrentApp = 'roamingAppDataForCurrentApp',
 
    /** Roamed tile images for Start.
     * `%LOCALAPPDATA%\Microsoft\Windows\RoamedTileImages`

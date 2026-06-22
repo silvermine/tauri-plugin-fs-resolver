@@ -2,13 +2,28 @@ use crate::Win32Path;
 use crate::WindowsApplicationDataPath;
 use crate::error::Error;
 use crate::error::Result;
-use crate::windows_paths::WindowsPath;
 use std::path::PathBuf;
 
-pub(crate) fn resolve_windows_path(path: &WindowsPath) -> Result<PathBuf> {
-   match path {
-      WindowsPath::Win32(path) => resolve_win32_path(path),
-      WindowsPath::WinMsix(path) => resolve_winmsix_path(path),
+/// Resolves Win32 known-folder paths via SHGetKnownFolderPath.
+///
+/// Each Win32Path variant maps 1:1 to a KNOWNFOLDERID GUID. This is the standard
+/// resolution mechanism for MSI-packaged (non-sandboxed) Win32 desktop applications.
+/// Implementation mirrors the pattern used by the `dirs-sys` crate.
+///
+/// See: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+pub(crate) fn resolve_win32_path(path: &Win32Path, _bundle_identifier: &str) -> Result<PathBuf> {
+   #[cfg(target_os = "windows")]
+   {
+      resolve_win32_path_inner(path, _bundle_identifier)
+   }
+
+   #[cfg(not(target_os = "windows"))]
+   {
+      Err(Error::IncorrectOS {
+         path: path.to_string(),
+         current_os: std::env::consts::OS.to_string(),
+         expected_os: "windows".to_string(),
+      })
    }
 }
 
@@ -20,7 +35,7 @@ pub(crate) fn resolve_windows_path(path: &WindowsPath) -> Result<PathBuf> {
 ///
 /// Fails with IncorrectOS on non-Windows, or InvalidPath if the app is not running
 /// in an MSIX package context (ApplicationData is unavailable outside app containers).
-fn resolve_winmsix_path(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
+pub(crate) fn resolve_win_msix_path(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
    #[cfg(target_os = "windows")]
    {
       resolve_winmsix_path_inner(path)
@@ -64,31 +79,8 @@ fn resolve_winmsix_path_inner(path: &WindowsApplicationDataPath) -> Result<PathB
    Ok(PathBuf::from(OsString::from_wide(&hpath)))
 }
 
-/// Resolves Win32 known-folder paths via SHGetKnownFolderPath.
-///
-/// Each Win32Path variant maps 1:1 to a KNOWNFOLDERID GUID. This is the standard
-/// resolution mechanism for MSI-packaged (non-sandboxed) Win32 desktop applications.
-/// Implementation mirrors the pattern used by the `dirs-sys` crate.
-///
-/// See: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
-fn resolve_win32_path(path: &Win32Path) -> Result<PathBuf> {
-   #[cfg(target_os = "windows")]
-   {
-      resolve_win32_path_inner(path)
-   }
-
-   #[cfg(not(target_os = "windows"))]
-   {
-      Err(Error::IncorrectOS {
-         path: path.to_string(),
-         current_os: std::env::consts::OS.to_string(),
-         expected_os: "windows".to_string(),
-      })
-   }
-}
-
 #[cfg(target_os = "windows")]
-fn resolve_win32_path_inner(path: &Win32Path) -> Result<PathBuf> {
+fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result<PathBuf> {
    use std::ffi::OsString;
    use std::ffi::c_void;
    use std::os::windows::ffi::OsStringExt;
@@ -188,6 +180,10 @@ fn resolve_win32_path_inner(path: &Win32Path) -> Result<PathBuf> {
       Win32Path::Libraries => known_folder(&FOLDERID_Libraries),
       Win32Path::Links => known_folder(&FOLDERID_Links),
       Win32Path::LocalAppData => known_folder(&FOLDERID_LocalAppData),
+      Win32Path::LocalAppDataForCurrentApp => {
+         let path = known_folder(&FOLDERID_LocalAppData)?;
+         Ok(path.join(bundle_identifier))
+      }
       Win32Path::LocalAppDataLow => known_folder(&FOLDERID_LocalAppDataLow),
       Win32Path::LocalizedResourcesDir => known_folder(&FOLDERID_LocalizedResourcesDir),
       Win32Path::Music => known_folder(&FOLDERID_Music),
@@ -226,6 +222,10 @@ fn resolve_win32_path_inner(path: &Win32Path) -> Result<PathBuf> {
       Win32Path::ResourceDir => known_folder(&FOLDERID_ResourceDir),
       Win32Path::Ringtones => known_folder(&FOLDERID_Ringtones),
       Win32Path::RoamingAppData => known_folder(&FOLDERID_RoamingAppData),
+      Win32Path::RoamingAppDataForCurrentApp => {
+         let path = known_folder(&FOLDERID_RoamingAppData)?;
+         Ok(path.join(bundle_identifier))
+      }
       Win32Path::RoamedTileImages => known_folder(&FOLDERID_RoamedTileImages),
       Win32Path::RoamingTiles => known_folder(&FOLDERID_RoamingTiles),
       Win32Path::SampleMusic => known_folder(&FOLDERID_SampleMusic),
@@ -287,4 +287,30 @@ const FOLDERID_SAVED_PICTURES_LIBRARY: windows_sys::core::GUID = windows_sys::co
 fn get_application_data() -> Result<windows::Storage::ApplicationData> {
    windows::Storage::ApplicationData::Current()
       .map_err(|_| Error::WindowsApplicationDataPathInvokedFromWin32Context)
+}
+
+#[cfg(target_os = "windows")]
+#[cfg(test)]
+// Platform-specific resolution tests; CI runs these on windows-latest (see .github/workflows/ci.yml).
+mod tests {
+
+   use super::*;
+
+   const BUNDLE_ID: &str = "com.example.app";
+
+   #[test]
+   fn local_app_data_path_for_current_app_appends_bundle_identifier() {
+      let base = resolve_win32_path(&Win32Path::LocalAppData, "").unwrap();
+      let path = resolve_win32_path(&Win32Path::LocalAppDataForCurrentApp, BUNDLE_ID).unwrap();
+
+      assert_eq!(path, base.join(BUNDLE_ID));
+   }
+
+   #[test]
+   fn roaming_app_data_path_for_current_app_appends_bundle_identifier() {
+      let base = resolve_win32_path(&Win32Path::RoamingAppData, "").unwrap();
+      let path = resolve_win32_path(&Win32Path::RoamingAppDataForCurrentApp, BUNDLE_ID).unwrap();
+
+      assert_eq!(path, base.join(BUNDLE_ID));
+   }
 }

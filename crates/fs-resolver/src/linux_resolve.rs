@@ -6,10 +6,10 @@ use std::path::PathBuf;
 #[cfg(any(target_os = "linux", test))]
 use std::path::Path;
 
-pub(crate) fn resolve_linux_path(path: &LinuxPath) -> Result<PathBuf> {
+pub(crate) fn resolve_linux_path(path: &LinuxPath, _bundle_identifier: &str) -> Result<PathBuf> {
    #[cfg(target_os = "linux")]
    {
-      resolve_linux_path_inner(path)
+      resolve_linux_path_inner(path, _bundle_identifier)
    }
 
    #[cfg(not(target_os = "linux"))]
@@ -23,18 +23,35 @@ pub(crate) fn resolve_linux_path(path: &LinuxPath) -> Result<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn resolve_linux_path_inner(path: &LinuxPath) -> Result<PathBuf> {
+fn resolve_linux_path_inner(path: &LinuxPath, bundle_identifier: &str) -> Result<PathBuf> {
    match path {
       LinuxPath::Home => home_dir(path),
       LinuxPath::DataHome => xdg_base("XDG_DATA_HOME", ".local/share", path),
+      LinuxPath::DataHomeForCurrentApp => {
+         let path = xdg_base("XDG_DATA_HOME", ".local/share", path)?;
+         Ok(path.join(bundle_identifier))
+      }
       LinuxPath::ConfigHome => xdg_base("XDG_CONFIG_HOME", ".config", path),
+      LinuxPath::ConfigHomeForCurrentApp => {
+         let path = xdg_base("XDG_CONFIG_HOME", ".config", path)?;
+         Ok(path.join(bundle_identifier))
+      }
       LinuxPath::CacheHome => xdg_base("XDG_CACHE_HOME", ".cache", path),
+      LinuxPath::CacheHomeForCurrentApp => {
+         let path = xdg_base("XDG_CACHE_HOME", ".cache", path)?;
+         Ok(path.join(bundle_identifier))
+      }
       LinuxPath::StateHome => xdg_base("XDG_STATE_HOME", ".local/state", path),
+      LinuxPath::StateHomeForCurrentApp => {
+         let path = xdg_base("XDG_STATE_HOME", ".local/state", path)?;
+         Ok(path.join(bundle_identifier))
+      }
       // XDG_BIN_HOME / ~/.local/bin is a de-facto convention, not part of the XDG
       // Base Directory Specification (which only defines DATA/CONFIG/STATE/CACHE/RUNTIME).
       LinuxPath::ExecutableDir => xdg_base("XDG_BIN_HOME", ".local/bin", path),
       LinuxPath::FontDir => {
-         xdg_base("XDG_DATA_HOME", ".local/share", path).map(|p| p.join("fonts"))
+         let path = xdg_base("XDG_DATA_HOME", ".local/share", path)?;
+         Ok(path.join("fonts"))
       }
       LinuxPath::RuntimeDir => runtime_dir(path),
       LinuxPath::DesktopDir => xdg_user_dir("DESKTOP", path),
@@ -242,6 +259,9 @@ fn extract_value(rest: &str) -> &str {
 mod tests {
    use super::*;
 
+   #[cfg(target_os = "linux")]
+   const BUNDLE_ID: &str = "com.example.app";
+
    fn home() -> PathBuf {
       PathBuf::from("/home/alice")
    }
@@ -330,5 +350,37 @@ mod tests {
          parse_user_dirs(c, "MUSIC", &home()),
          Some(PathBuf::from("/home/alice/Music"))
       );
+   }
+
+   #[cfg(target_os = "linux")]
+   #[test]
+   fn data_home_for_current_app_appends_bundle_identifier() {
+      let root = resolve_linux_path(&LinuxPath::DataHome, "").unwrap();
+      let path = resolve_linux_path(&LinuxPath::DataHomeForCurrentApp, BUNDLE_ID).unwrap();
+      assert_eq!(path, root.join(BUNDLE_ID));
+   }
+
+   #[cfg(target_os = "linux")]
+   #[test]
+   fn config_home_for_current_app_appends_bundle_identifier() {
+      let root = resolve_linux_path(&LinuxPath::ConfigHome, "").unwrap();
+      let path = resolve_linux_path(&LinuxPath::ConfigHomeForCurrentApp, BUNDLE_ID).unwrap();
+      assert_eq!(path, root.join(BUNDLE_ID));
+   }
+
+   #[cfg(target_os = "linux")]
+   #[test]
+   fn cache_home_for_current_app_appends_bundle_identifier() {
+      let root = resolve_linux_path(&LinuxPath::CacheHome, "").unwrap();
+      let path = resolve_linux_path(&LinuxPath::CacheHomeForCurrentApp, BUNDLE_ID).unwrap();
+      assert_eq!(path, root.join(BUNDLE_ID));
+   }
+
+   #[cfg(target_os = "linux")]
+   #[test]
+   fn state_home_for_current_app_appends_bundle_identifier() {
+      let root = resolve_linux_path(&LinuxPath::StateHome, "").unwrap();
+      let path = resolve_linux_path(&LinuxPath::StateHomeForCurrentApp, BUNDLE_ID).unwrap();
+      assert_eq!(path, root.join(BUNDLE_ID));
    }
 }
