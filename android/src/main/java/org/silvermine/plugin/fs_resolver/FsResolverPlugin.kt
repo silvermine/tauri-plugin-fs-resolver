@@ -37,10 +37,12 @@ enum class AndroidPathCollection {
    obbDirs,
 }
 
+@InvokeArg
 class AndroidPathResolutionArgs {
    lateinit var path: AndroidPath
 }
 
+@InvokeArg
 class AndroidPathCollectionResolutionArgs {
    lateinit var collection: AndroidPathCollection
 }
