@@ -31,7 +31,8 @@ pub enum IosPath {
    CachesDirectory,
 
    // Backed up, hidden from user. Maps to SearchPathDirectory.applicationSupportDirectory.
-   // <sandbox>/Library/Application Support
+   // Appends the bundle identifier for namespacing.
+   // <sandbox>/Library/Application Support/<bundle-identifier>
    ApplicationSupportDirectory,
 
    // Autosaved document storage. Maps to SearchPathDirectory.autosavedInformationDirectory.

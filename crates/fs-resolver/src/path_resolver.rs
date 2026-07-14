@@ -30,6 +30,7 @@ pub struct PathResolver {
 impl PathResolver {
    pub fn new(bundle_identifier: String) -> Result<Self> {
       validate_bundle_identifier(&bundle_identifier)?;
+      let ios_bundle_identifier = bundle_identifier.clone();
       let linux_bundle_identifier = bundle_identifier.clone();
       let mac_bundle_identifier = bundle_identifier.clone();
       let win32_bundle_identifier = bundle_identifier;
@@ -39,8 +40,8 @@ impl PathResolver {
          resolve_android_path_collection: Box::new(|_| {
             Err(Error::AndroidPathResolutionNotConfigured)
          }),
-         resolve_ios: Box::new(|path: &IosPath| -> Result<PathBuf> {
-            crate::ios_resolve::resolve_ios_path(path)
+         resolve_ios: Box::new(move |path: &IosPath| -> Result<PathBuf> {
+            crate::ios_resolve::resolve_ios_path(path, &ios_bundle_identifier)
          }),
          resolve_linux: Box::new(move |path: &LinuxPath| -> Result<PathBuf> {
             crate::linux_resolve::resolve_linux_path(path, &linux_bundle_identifier)
