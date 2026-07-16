@@ -4,10 +4,12 @@ Default permissions for fs-resolver plugin (all resolve commands)
 
 #### This default permission set includes the following:
 
+- `allow-get-fs-environment`
 - `allow-resolve-mac-path`
 - `allow-resolve-ios-path`
 - `allow-resolve-linux-path`
-- `allow-resolve-windows-path`
+- `allow-resolve-win32-path`
+- `allow-resolve-windows-application-data-path`
 - `allow-resolve-android-path`
 - `allow-resolve-android-path-collection`
 
@@ -19,6 +21,32 @@ Default permissions for fs-resolver plugin (all resolve commands)
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`fs-resolver:allow-get-fs-environment`
+
+</td>
+<td>
+
+Enables the get_fs_environment command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-resolver:deny-get-fs-environment`
+
+</td>
+<td>
+
+Denies the get_fs_environment command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -153,12 +181,12 @@ Denies the resolve_mac_path command without any pre-configured scope.
 <tr>
 <td>
 
-`fs-resolver:allow-resolve-windows-path`
+`fs-resolver:allow-resolve-win32-path`
 
 </td>
 <td>
 
-Enables the resolve_windows_path command without any pre-configured scope.
+Enables the resolve_win32_path command without any pre-configured scope.
 
 </td>
 </tr>
@@ -166,12 +194,38 @@ Enables the resolve_windows_path command without any pre-configured scope.
 <tr>
 <td>
 
-`fs-resolver:deny-resolve-windows-path`
+`fs-resolver:deny-resolve-win32-path`
 
 </td>
 <td>
 
-Denies the resolve_windows_path command without any pre-configured scope.
+Denies the resolve_win32_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-resolver:allow-resolve-windows-application-data-path`
+
+</td>
+<td>
+
+Enables the resolve_windows_application_data_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-resolver:deny-resolve-windows-application-data-path`
+
+</td>
+<td>
+
+Denies the resolve_windows_application_data_path command without any pre-configured scope.
 
 </td>
 </tr>

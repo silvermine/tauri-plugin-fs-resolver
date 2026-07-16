@@ -27,18 +27,19 @@ pub(crate) fn resolve_win32_path(path: &Win32Path, _bundle_identifier: &str) -> 
    }
 }
 
-/// Resolves MSIX app-container paths via the WinRT ApplicationData API.
+/// Resolves packaged app paths via the WinRT ApplicationData API.
 ///
-/// MSIX-packaged apps (e.g. Microsoft Store) run in a virtualized filesystem where
-/// standard Win32 known-folder paths are redirected. ApplicationData::Current() returns
-/// the real sandboxed locations (e.g. `AppData\Local\Packages\<id>\LocalState`).
+/// Packaged apps (MSIX/APPX with package identity) expose per-package folders under
+/// `AppData\Local\Packages\<id>\...`. Those folders are obtained from a WinRT
+/// `ApplicationData` instance — see [`get_application_data`] for why that acquisition
+/// branches on AppContainer vs MediumIL.
 ///
-/// Fails with IncorrectOS on non-Windows, or InvalidPath if the app is not running
-/// in an MSIX package context (ApplicationData is unavailable outside app containers).
-pub(crate) fn resolve_win_msix_path(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
+/// Fails with IncorrectOS on non-Windows, or an ApplicationData-related error if the
+/// process lacks usable package identity / cannot open the package data store.
+pub(crate) fn resolve_win_packaged_path(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
    #[cfg(target_os = "windows")]
    {
-      resolve_winmsix_path_inner(path)
+      resolve_win_packaged_path_inner(path)
    }
 
    #[cfg(not(target_os = "windows"))]
@@ -52,12 +53,11 @@ pub(crate) fn resolve_win_msix_path(path: &WindowsApplicationDataPath) -> Result
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_winmsix_path_inner(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
+fn resolve_win_packaged_path_inner(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
    use std::ffi::OsString;
    use std::os::windows::ffi::OsStringExt;
 
-   // ApplicationData::Current() requires the process to be running inside an MSIX
-   // app container. Will return E_NOT_SET / 0x80070490 if not packaged.
+   // See get_application_data for AppContainer vs MediumIL API selection.
    let app_data = get_application_data()?;
 
    let folder = match path {
@@ -119,11 +119,6 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       KF_FLAG_DONT_VERIFY, SHGetKnownFolderPath,
    };
    use windows_sys::core::GUID;
-
-   // If we try to access a Win32 path from an MSIX packaged context, we want to fail this operation.
-   if get_application_data().is_ok() {
-      return Err(Error::Win32PathInvokedFromMsixPackagedContext);
-   }
 
    fn known_folder(folder_id: &GUID) -> Result<PathBuf> {
       unsafe {
@@ -271,22 +266,108 @@ const FOLDERID_SAVED_PICTURES_LIBRARY: windows_sys::core::GUID = windows_sys::co
    data4: [0x94, 0xB0, 0x29, 0x23, 0x34, 0x77, 0xB6, 0xC3],
 };
 
-/// Returns whether ApplicationData::Current() succeeds, i.e. the process runs
-/// in a packaged (MSIX) app context. Windows provides no API to detect MSI
-/// specifically; unpackaged Win32 (including MSI installs) all lack package
-/// identity.
-/// So we can safely state that if ApplicationData::Current() succeeds, the
-/// process is running in an MSIX app context.
-/// If it fails, the process is running in a Win32 app context.
+/// Obtains the WinRT [`ApplicationData`](https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata)
+/// instance for the current packaged process.
 ///
-/// In practice, this is used to determine if the `WindowsPath::ApplicationData` or
-/// `WindowsPath::Win32` variant should be used.
-/// If this returns true, the `WindowsPath::ApplicationData` variant should be used.
-/// If this returns false, the `WindowsPath::Win32` variant should be used.
+/// # Why this is not a single API call
+///
+/// On Windows, “packaged” and “sandboxed” are **orthogonal**. A process can have
+/// [package identity](https://learn.microsoft.com/en-us/windows/msix/detect-package-identity)
+/// (linked to an MSIX/APPX registration — what this crate’s `FsEnvironment::WinPackaged`
+/// detects via `GetCurrentPackageFullName`) without running inside an
+/// [AppContainer](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation)
+/// sandbox. Trust level is a separate manifest knob (`uap10:TrustLevel`).
+///
+/// Microsoft’s documented contract (see the
+/// [Windows App SDK ApplicationData spec](https://github.com/microsoft/WindowsAppSDK/blob/main/specs/applicationdata/ApplicationData.md))
+/// is:
+///
+/// | Process trust | Documented API |
+/// |---|---|
+/// | AppContainer (`uap10:TrustLevel="appContainer"`) | [`ApplicationData::Current`](https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata.current) |
+/// | Not AppContainer (e.g. MediumIL) | [`ApplicationDataManager::CreateForPackageFamily`](https://learn.microsoft.com/en-us/uwp/api/windows.management.core.applicationdatamanager.createforpackagefamily) |
+///
+/// In practice the line is softer than that table: many MediumIL Desktop Bridge /
+/// Tauri MSIX processes (`EntryPoint="Windows.FullTrustApplication"`,
+/// `RuntimeBehavior="packagedClassicApp"`) **do** succeed with `Current()` (including
+/// this repo’s `examples/tauri-app` `dev:msix` flow). Other MediumIL hosts — notably
+/// some WinUI 3 packaged apps — fail `Current()` and need `CreateForPackageFamily`.
+/// So we do not assume MediumIL ⇒ fallback; we **try `Current` first**, then fall back.
+///
+/// The two APIs are still complementary, not interchangeable:
+/// - `Current` is the historical UWP “self” accessor.
+/// - `CreateForPackageFamily` is a [management API](https://learn.microsoft.com/en-us/uwp/api/windows.management.core.applicationdatamanager)
+///   for MediumIL+ callers (and tools). Docs state it **cannot** be used from an
+///   AppContainer process, so AppContainer apps must take the `Current` path.
+///
+/// The Windows App SDK’s newer `Microsoft.Windows.Storage.ApplicationData.GetDefault()`
+/// performs the same Current-then-fallback branch; we mirror it with inbox WinRT types.
+///
+/// # Packaging terms (brief)
+///
+/// - **MSIX / APPX** — the package *format* and installer registration. Having an MSIX does
+///   **not** imply AppContainer; trust level is declared separately in the manifest
+///   (`uap10:TrustLevel`, `uap10:RuntimeBehavior`). See
+///   [uap10 extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-application).
+/// - **WinRT** — the *API surface* (`Windows.Storage.*`, `Windows.Management.Core.*`, …).
+///   Both branches below are WinRT; they differ only in how the `ApplicationData` object
+///   is obtained.
+/// - **`packagedClassicApp` vs `win32App`** — `RuntimeBehavior` knobs. `packagedClassicApp`
+///   is the common Desktop Bridge / Tauri MSIX path (often MediumIL). `win32App` is used by
+///   sparse / external-location identity packages that keep classic Win32 data layout; those
+///   apps usually should map paths via Win32 known folders instead of ApplicationData.
+///
+/// # Branches
+///
+/// 1. **`ApplicationData::Current()`** — preferred path. Works for AppContainer apps, and
+///    often for MediumIL packaged desktop apps as well. Returns immediately on success.
+/// 2. **`Package::Current` → family name → `CreateForPackageFamily`** — defensive fallback
+///    when `Current` fails despite package identity (documented MediumIL / non-AppContainer
+///    cases, including some WinUI 3 packaged hosts). Resolves the package family name via
+///    [`Package.Id.FamilyName`](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.packageid.familyname)
+///    and opens the same per-user package data store.
+///
+/// Unpackaged processes (no package identity) fail both paths; callers should not invoke
+/// this when `FsEnvironment` is plain Win32.
 #[cfg(target_os = "windows")]
 fn get_application_data() -> Result<windows::Storage::ApplicationData> {
-   windows::Storage::ApplicationData::Current()
-      .map_err(|_| Error::WindowsApplicationDataPathInvokedFromWin32Context)
+   use windows::Management::Core::ApplicationDataManager;
+
+   // Preferred: works for AppContainer, and often for MediumIL packaged desktop (e.g. Tauri MSIX).
+   let app_data_result = windows::Storage::ApplicationData::Current();
+
+   if let Ok(app_data) = app_data_result {
+      return Ok(app_data);
+   }
+
+   let app_data_error_string = app_data_result
+      .err()
+      .map_or("".to_string(), |e| e.to_string());
+
+   // Fallback when Current fails despite package identity (MS-documented MediumIL path;
+   // CreateForPackageFamily is blocked inside AppContainer — only reached when Current failed).
+   let family_name = windows::ApplicationModel::Package::Current()
+      .map_err(|e| {
+         Error::CouldNotRetrieveCurrentPackage(e.to_string(), app_data_error_string.to_owned())
+      })?
+      .Id()
+      .map_err(|e| {
+         Error::CouldNotRetrieveIdFromPackage(e.to_string(), app_data_error_string.to_owned())
+      })?
+      .FamilyName()
+      .map_err(|e| {
+         Error::CouldNotRetrieveFamilyNameFromPackage(
+            e.to_string(),
+            app_data_error_string.to_owned(),
+         )
+      })?;
+
+   ApplicationDataManager::CreateForPackageFamily(&family_name).map_err(|e| {
+      Error::CouldNotCreateApplicationDataForPackageFamily(
+         e.to_string(),
+         app_data_error_string.to_owned(),
+      )
+   })
 }
 
 #[cfg(target_os = "windows")]

@@ -1,15 +1,23 @@
 export {
+   getFsEnvironment,
    resolveAndroidPath,
    resolveAndroidPathCollection,
    resolveIosPath,
    resolveLinuxPath,
    resolveMacPath,
-   resolveWindowsPath,
+   resolveWin32Path,
+   resolveWindowsApplicationDataPath,
 } from './platform-paths';
 
-export { resolveMapping, type CrossPlatformMapping, type PlatformMapping } from './path-mapping';
+export {
+   resolveMapping,
+   type CrossPlatformMapping,
+   type PlatformMapping,
+   type WinPackagedPathMapping,
+} from './path-mapping';
 
 export {
+   FsEnvironment,
    AndroidPath,
    AndroidPathCollection,
    IosPath,
@@ -17,5 +25,4 @@ export {
    MacPath,
    Win32Path,
    WindowsApplicationDataPath,
-   WindowsPath,
 } from './types';

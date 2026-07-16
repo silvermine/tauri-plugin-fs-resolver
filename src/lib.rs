@@ -29,12 +29,14 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
          Ok(())
       })
       .invoke_handler(tauri::generate_handler![
+         commands::get_fs_environment,
          commands::resolve_android_path,
          commands::resolve_android_path_collection,
          commands::resolve_ios_path,
          commands::resolve_linux_path,
          commands::resolve_mac_path,
-         commands::resolve_windows_path,
+         commands::resolve_win32_path,
+         commands::resolve_windows_application_data_path,
       ])
       .build()
 }

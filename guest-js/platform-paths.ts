@@ -1,13 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
-import { platform } from '@tauri-apps/plugin-os';
 import {
    AndroidPath,
    AndroidPathCollection,
    MacPath,
    IosPath,
-   WindowsPath,
    LinuxPath,
+   Win32Path,
+   WindowsApplicationDataPath,
+   FsEnvironment,
 } from './types';
+
+let fsEnvironment: FsEnvironment | undefined;
 
 /**
  * Resolves a path on the Android platform.
@@ -19,8 +22,8 @@ import {
  * @returns The resolved path.
  */
 export async function resolveAndroidPath(path: AndroidPath): Promise<string> {
-   if (platform() !== 'android') {
-      throw new Error('This function is only available on Android');
+   if (await getFsEnvironment() !== 'android') {
+      throw new Error('This function is only available on android');
    }
 
    return await invoke<string>('plugin:fs-resolver|resolve_android_path', { path });
@@ -37,8 +40,8 @@ export async function resolveAndroidPath(path: AndroidPath): Promise<string> {
  */
 
 export async function resolveAndroidPathCollection(collection: AndroidPathCollection): Promise<string[]> {
-   if (platform() !== 'android') {
-      throw new Error('This function is only available on Android');
+   if (await getFsEnvironment() !== 'android') {
+      throw new Error('This function is only available on android');
    }
 
    return await invoke<string[]>('plugin:fs-resolver|resolve_android_path_collection', { collection });
@@ -54,8 +57,8 @@ export async function resolveAndroidPathCollection(collection: AndroidPathCollec
  * @returns The resolved path.
  */
 export async function resolveIosPath(path: IosPath): Promise<string> {
-   if (platform() !== 'ios') {
-      throw new Error('This function is only available on iOS');
+   if (await getFsEnvironment() !== 'ios') {
+      throw new Error('This function is only available on ios');
    }
 
    return await invoke<string>('plugin:fs-resolver|resolve_ios_path', { path });
@@ -71,8 +74,8 @@ export async function resolveIosPath(path: IosPath): Promise<string> {
  * @returns The resolved path.
  */
 export async function resolveLinuxPath(path: LinuxPath): Promise<string> {
-   if (platform() !== 'linux') {
-      throw new Error('This function is only available on Linux');
+   if (await getFsEnvironment() !== 'linux') {
+      throw new Error('This function is only available on linux');
    }
 
    return await invoke<string>('plugin:fs-resolver|resolve_linux_path', { path });
@@ -88,8 +91,8 @@ export async function resolveLinuxPath(path: LinuxPath): Promise<string> {
  * @returns The resolved path.
  */
 export async function resolveMacPath(path: MacPath): Promise<string> {
-   if (platform() !== 'macos') {
-      throw new Error('This function is only available on macOS');
+   if (await getFsEnvironment() !== 'macos') {
+      throw new Error('This function is only available on macos');
    }
 
    return await invoke<string>('plugin:fs-resolver|resolve_mac_path', { path });
@@ -98,16 +101,60 @@ export async function resolveMacPath(path: MacPath): Promise<string> {
 /**
  * Resolves a Win32 path on the Windows platform.
  *
- * If this function is called on a platform other than Windows, it will throw an
+ * If this function is called on a platform other than Windows (WinPackaged or Win32),
+ * it will throw an error.
+ *
+ * @param path - The path to resolve.
+ * @returns The resolved path.
+ */
+export async function resolveWin32Path(path: Win32Path): Promise<string> {
+   const environment = await getFsEnvironment();
+
+   if (environment !== 'win32' && environment !== 'winpackaged') {
+      throw new Error('This function is only available on win32 or winpackaged');
+   }
+
+   return await invoke<string>('plugin:fs-resolver|resolve_win32_path', { path });
+}
+
+/**
+ * Resolves a path on the Windows platform.
+ *
+ * If this function is called on a platform other than WinPackaged, it will throw an
  * error.
  *
  * @param path - The path to resolve.
  * @returns The resolved path.
  */
-export async function resolveWindowsPath(path: WindowsPath): Promise<string> {
-   if (platform() !== 'windows') {
-      throw new Error('This function is only available on Windows');
+export async function resolveWindowsApplicationDataPath(path: WindowsApplicationDataPath): Promise<string> {
+   if (await getFsEnvironment() !== 'winpackaged') {
+      throw new Error('This function is only available on winpackaged');
    }
 
-   return await invoke<string>('plugin:fs-resolver|resolve_windows_path', { path });
+   return await invoke<string>('plugin:fs-resolver|resolve_windows_application_data_path', { path });
+}
+
+/**
+ * Returns the file system environment.
+ *
+ * @returns The file system environment.
+ */
+export async function getFsEnvironment(): Promise<FsEnvironment> {
+   // This is cached, as it will not change during the lifetime of the application.
+   if (fsEnvironment) {
+      return fsEnvironment;
+   }
+
+   fsEnvironment = await invoke<FsEnvironment>('plugin:fs-resolver|get_fs_environment');
+
+   return fsEnvironment;
+}
+
+/**
+ * Clears the file system environment cache.
+ *
+ * This is only meant to be used for tests.
+ */
+export function clearFsEnvironmentCache(): void {
+   fsEnvironment = undefined;
 }

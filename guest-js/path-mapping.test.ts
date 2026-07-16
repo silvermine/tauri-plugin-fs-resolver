@@ -1,22 +1,23 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { clearMocks } from '@tauri-apps/api/mocks';
 
-import { AndroidPath, IosPath, LinuxPath, MacPath, Win32Path } from './types';
+import { AndroidPath, FsEnvironment, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath } from './types';
 import { CrossPlatformMapping, resolveMapping } from './path-mapping';
 
 const resolvedAndroidPath = 'android_path',
       resolvedIosPath = 'ios_path',
       resolvedLinuxPath = 'linux_path',
       resolvedMacPath = 'mac_path',
-      resolvedWindowsPath = 'windows_path';
+      resolvedWin32Path = 'win32_path',
+      resolvedWindowsApplicationDataPath = 'windows_application_data_path';
 
-let mockPlatform: '' | 'android' | 'ios' | 'linux' | 'macos' | 'windows' = '';
+const winPackagedMissingMappingErrorMessage = `winPackaged mapping is missing while running as WinPackaged.
+resolveMapping does not fall back to win32. Set winPackaged explicitly:
+{ kind: 'windowsApplicationDataPath', mapping: { ... } } or
+{ kind: 'win32', mapping: { ... } } (same known folder as unpackaged if that is intentional).
+Note: resolveWin32Path still works under WinPackaged; only cross-platform mapping has this specific requirement.`;
 
-vi.mock('@tauri-apps/plugin-os', () => {
-   return {
-      platform: () => { return mockPlatform; },
-   };
-});
+let mockFsEnvironment: FsEnvironment | undefined;
 
 vi.mock('@tauri-apps/api/path', () => {
    return {
@@ -30,7 +31,9 @@ vi.mock('./platform-paths', () => {
       resolveIosPath: () => { return resolvedIosPath; },
       resolveLinuxPath: () => { return resolvedLinuxPath; },
       resolveMacPath: () => { return resolvedMacPath; },
-      resolveWindowsPath: () => { return resolvedWindowsPath; },
+      resolveWin32Path: () => { return resolvedWin32Path; },
+      resolveWindowsApplicationDataPath: () => { return resolvedWindowsApplicationDataPath; },
+      getFsEnvironment: () => { return mockFsEnvironment; },
    };
 });
 
@@ -40,68 +43,82 @@ describe('fs-resolver actions map to Tauri commands', () => {
    it('resolveMapping — sends path, returns resolved path', async () => {
 
       const pathMapping: CrossPlatformMapping = {
-         android: { platform_path: AndroidPath.DataDir },
-         ios: { platform_path: IosPath.CachesDirectory },
-         linux: { platform_path: LinuxPath.DataHomeForCurrentApp },
-         macos: { platform_path: MacPath.ApplicationSupportDirectoryForCurrentApp },
-         windows: { platform_path: { win32: Win32Path.RoamingAppDataForCurrentApp } },
+         android: { platformPath: AndroidPath.DataDir },
+         ios: { platformPath: IosPath.CachesDirectory },
+         linux: { platformPath: LinuxPath.DataHomeForCurrentApp },
+         macos: { platformPath: MacPath.ApplicationSupportDirectoryForCurrentApp },
+         win32: { platformPath: Win32Path.RoamingAppDataForCurrentApp },
+         winPackaged: { kind: 'windowsApplicationDataPath', mapping: { platformPath: WindowsApplicationDataPath.LocalFolder } },
       };
 
-      mockPlatform = 'android';
+      mockFsEnvironment = 'android';
       expect(await resolveMapping(pathMapping)).toBe(resolvedAndroidPath);
 
-      mockPlatform = 'ios';
+      mockFsEnvironment = 'ios';
       expect(await resolveMapping(pathMapping)).toBe(resolvedIosPath);
 
-      mockPlatform = 'linux';
+      mockFsEnvironment = 'linux';
       expect(await resolveMapping(pathMapping)).toBe(resolvedLinuxPath);
 
-      mockPlatform = 'macos';
+      mockFsEnvironment = 'macos';
       expect(await resolveMapping(pathMapping)).toBe(resolvedMacPath);
 
-      mockPlatform = 'windows';
-      expect(await resolveMapping(pathMapping)).toBe(resolvedWindowsPath);
+      mockFsEnvironment = 'win32';
+      expect(await resolveMapping(pathMapping)).toBe(resolvedWin32Path);
+
+      mockFsEnvironment = 'winpackaged';
+      expect(await resolveMapping(pathMapping)).toBe(resolvedWindowsApplicationDataPath);
    });
 
 
    it('resolveMapping — sends path, returns resolved path with relative path', async () => {
 
       const pathMapping: CrossPlatformMapping = {
-         android: { platform_path: AndroidPath.DataDir, relativePath: 'android_relative_path' },
-         ios: { platform_path: IosPath.CachesDirectory, relativePath: 'ios_relative_path' },
-         linux: { platform_path: LinuxPath.DataHome, relativePath: 'linux_relative_path' },
-         macos: { platform_path: MacPath.CachesDirectory, relativePath: 'mac_relative_path' },
-         windows: { platform_path: { win32: Win32Path.LocalAppData }, relativePath: 'windows_relative_path' },
+         android: { platformPath: AndroidPath.DataDir, relativePath: 'android_relative_path' },
+         ios: { platformPath: IosPath.CachesDirectory, relativePath: 'ios_relative_path' },
+         linux: { platformPath: LinuxPath.DataHome, relativePath: 'linux_relative_path' },
+         macos: { platformPath: MacPath.CachesDirectory, relativePath: 'mac_relative_path' },
+         win32: { platformPath: Win32Path.LocalAppData, relativePath: 'win32_relative_path' },
+         winPackaged: {
+            kind: 'windowsApplicationDataPath',
+            mapping: {
+               platformPath: WindowsApplicationDataPath.LocalFolder,
+               relativePath: 'windows_application_data_relative_path',
+            },
+         },
       };
 
-      mockPlatform = 'android';
+      mockFsEnvironment = 'android';
       expect(await resolveMapping(pathMapping)).toBe(`${resolvedAndroidPath}/android_relative_path`);
 
-      mockPlatform = 'ios';
+      mockFsEnvironment = 'ios';
       expect(await resolveMapping(pathMapping)).toBe(`${resolvedIosPath}/ios_relative_path`);
 
-      mockPlatform = 'linux';
+      mockFsEnvironment = 'linux';
       expect(await resolveMapping(pathMapping)).toBe(`${resolvedLinuxPath}/linux_relative_path`);
 
-      mockPlatform = 'macos';
+      mockFsEnvironment = 'macos';
       expect(await resolveMapping(pathMapping)).toBe(`${resolvedMacPath}/mac_relative_path`);
 
-      mockPlatform = 'windows';
-      expect(await resolveMapping(pathMapping)).toBe(`${resolvedWindowsPath}/windows_relative_path`);
+      mockFsEnvironment = 'win32';
+      expect(await resolveMapping(pathMapping)).toBe(`${resolvedWin32Path}/win32_relative_path`);
+
+      mockFsEnvironment = 'winpackaged';
+      expect(await resolveMapping(pathMapping)).toBe(`${resolvedWindowsApplicationDataPath}/windows_application_data_relative_path`);
    });
 
    it('resolveMapping — rejects invalid relative paths before joining', async () => {
       const baseMapping: CrossPlatformMapping = {
-         android: { platform_path: AndroidPath.DataDir },
+         android: { platformPath: AndroidPath.DataDir },
       };
 
-      mockPlatform = 'android';
+      mockFsEnvironment = 'android';
 
       for (const relativePath of [ '', '.', '..', '/absolute', 'foo/..', 'foo/.', 'foo//bar' ]) {
          await expect(
             resolveMapping({
                ...baseMapping,
-               android: { platform_path: AndroidPath.DataDir, relativePath },
+               android: { platformPath: AndroidPath.DataDir, relativePath },
             }))
             .rejects
             .toThrow(/Relative path must/);
@@ -111,26 +128,85 @@ describe('fs-resolver actions map to Tauri commands', () => {
    it('resolveMapping - throws mappings defined with invalid relative paths', async () => {
 
       const pathMapping: CrossPlatformMapping = {
-         android: { platform_path: AndroidPath.DataDir, relativePath: '../escape' },
-         ios: { platform_path: IosPath.CachesDirectory, relativePath: '../escape' },
-         linux: { platform_path: LinuxPath.DataHome, relativePath: '../escape' },
-         macos: { platform_path: MacPath.CachesDirectory, relativePath: '../escape' },
-         windows: { platform_path: { win32: Win32Path.LocalAppData }, relativePath: '../escape' },
+         android: { platformPath: AndroidPath.DataDir, relativePath: '../escape' },
+         ios: { platformPath: IosPath.CachesDirectory, relativePath: '../escape' },
+         linux: { platformPath: LinuxPath.DataHome, relativePath: '../escape' },
+         macos: { platformPath: MacPath.CachesDirectory, relativePath: '../escape' },
+         win32: { platformPath: Win32Path.LocalAppData, relativePath: '../escape' },
+         winPackaged: {
+            kind: 'windowsApplicationDataPath',
+            mapping: {
+               platformPath: WindowsApplicationDataPath.LocalFolder,
+               relativePath: '../escape',
+            },
+         },
       };
 
-      mockPlatform = 'android';
+      mockFsEnvironment = 'android';
       await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
 
-      mockPlatform = 'ios';
+      mockFsEnvironment = 'ios';
       await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
 
-      mockPlatform = 'linux';
+      mockFsEnvironment = 'linux';
       await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
 
-      mockPlatform = 'macos';
+      mockFsEnvironment = 'macos';
       await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
 
-      mockPlatform = 'windows';
+      mockFsEnvironment = 'win32';
       await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
+
+      mockFsEnvironment = 'winpackaged';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow(/Relative path must/);
+   });
+
+   it('resolveMapping - resolve mapping for winpackaged environment does not fall back to win32', async () => {
+      const pathMapping: CrossPlatformMapping = {
+         win32: { platformPath: Win32Path.LocalAppData },
+      };
+
+      mockFsEnvironment = 'winpackaged';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow(winPackagedMissingMappingErrorMessage);
+   });
+
+   it('resolveMapping - resolve mapping for win32 environment does not fall back to winpackaged', async () => {
+      const pathMapping: CrossPlatformMapping = {
+         winPackaged: { kind: 'windowsApplicationDataPath', mapping: { platformPath: WindowsApplicationDataPath.LocalFolder } },
+      };
+
+      mockFsEnvironment = 'win32';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for Win32');
+   });
+
+   it('resolve-mapping: winPackaged supports win32 paths when defined', async () => {
+      const pathMapping: CrossPlatformMapping = {
+         winPackaged: { kind: 'win32', mapping: { platformPath: Win32Path.LocalAppData } },
+      };
+
+      mockFsEnvironment = 'winpackaged';
+      expect(await resolveMapping(pathMapping)).toBe(resolvedWin32Path);
+   });
+
+   it('throws when mapping not present for current environment', async () => {
+      const pathMapping: CrossPlatformMapping = {};
+
+      mockFsEnvironment = 'android';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for Android');
+
+      mockFsEnvironment = 'ios';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for iOS');
+
+      mockFsEnvironment = 'linux';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for Linux');
+
+      mockFsEnvironment = 'macos';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for macOS');
+
+      mockFsEnvironment = 'win32';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow('No path defined for Win32');
+
+      mockFsEnvironment = 'winpackaged';
+      await expect(resolveMapping(pathMapping)).rejects.toThrow(winPackagedMissingMappingErrorMessage);
    });
 });

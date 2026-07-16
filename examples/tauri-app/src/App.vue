@@ -1,7 +1,7 @@
 <template>
    <main class="container">
       <h1>tauri-plugin-fs-resolver</h1>
-      <div v-if="os === 'android'" class="radio-button-container">
+      <div v-if="selectedEnvironment === 'android'" class="radio-button-container">
          <label class="radio-button">
             <input type="radio" value="path" v-model="androidPathType" /> Path
          </label>
@@ -9,12 +9,12 @@
             <input type="radio" value="collection" v-model="androidPathType" /> Collection
          </label>
       </div>
-      <div v-if="os === 'windows'">
+      <div v-if="selectedEnvironment === 'win32' || selectedEnvironment === 'winpackaged'">
          <label class="radio-button">
-            <input type="radio" value="win32" v-model="windowsPathType" /> Win32
+            <input type="radio" value="win32" v-model="selectedEnvironment" /> Win32
          </label>
          <label class="radio-button">
-            <input type="radio" value="winmsix" v-model="windowsPathType" /> WinMsix
+            <input type="radio" value="winpackaged" v-model="selectedEnvironment" /> WinPackaged
          </label>
       </div>
       <div class="path-container">
@@ -31,15 +31,31 @@
 
 <script setup lang="ts">
 
-import { ref, computed, watch } from 'vue';
-import { platform } from '@tauri-apps/plugin-os';
-import { AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath, resolveAndroidPath, resolveAndroidPathCollection, resolveIosPath, resolveLinuxPath, resolveMacPath, resolveWindowsPath } from 'tauri-plugin-fs-resolver';
+import { ref, computed, watch, onMounted, ComputedRef } from 'vue';
+import { 
+   AndroidPath, 
+   AndroidPathCollection, 
+   IosPath, 
+   LinuxPath, 
+   MacPath, 
+   Win32Path, 
+   WindowsApplicationDataPath, 
+   getFsEnvironment,
+   resolveAndroidPath, 
+   resolveAndroidPathCollection, 
+   resolveIosPath, 
+   resolveLinuxPath, 
+   resolveMacPath, 
+   resolveWin32Path, 
+   resolveWindowsApplicationDataPath,
+   FsEnvironment,
+ } from 'tauri-plugin-fs-resolver';
 
 const selectedPath = ref<string>('none selected'),
       selectedPathResolved = ref<string>('none resolved'),
       androidPathType = ref<'path' | 'collection'>('path'),
-      windowsPathType = ref<'win32' | 'winmsix'>('win32'),
-      os = platform(),
+      detectedEnvironment = ref<FsEnvironment>('android'),
+      selectedEnvironment = ref<FsEnvironment>('android'),
       didPathResolutionFail = ref(false);
 
 const resolvePath = async (path: string) => {
@@ -47,26 +63,24 @@ const resolvePath = async (path: string) => {
    try {
       didPathResolutionFail.value = false;
       let resolvedPath: string = '';
-      if (os === 'android') {
+      if (selectedEnvironment.value === 'android') {
          if (androidPathType.value === 'path') {
             resolvedPath = await resolveAndroidPath(path as AndroidPath);
          } else {
             resolvedPath = (await resolveAndroidPathCollection(path as AndroidPathCollection)).join(', ');
          }
-      } else if (os === 'ios') {
+      } else if (selectedEnvironment.value === 'ios') {
          resolvedPath = await resolveIosPath(path as IosPath);
-      } else if (os === 'linux') {
+      } else if (selectedEnvironment.value === 'linux') {
          resolvedPath = await resolveLinuxPath(path as LinuxPath);
-      } else if (os === 'macos') {
+      } else if (selectedEnvironment.value === 'macos') {
          resolvedPath = await resolveMacPath(path as MacPath);
-      } else if (os === 'windows') {
-         if (windowsPathType.value === 'win32') {
-            resolvedPath = await resolveWindowsPath({ win32: path as Win32Path });
-         } else {
-            resolvedPath = await resolveWindowsPath({ winMsix: path as WindowsApplicationDataPath });
-         }
+      } else if (selectedEnvironment.value === 'win32') {
+         resolvedPath = await resolveWin32Path(path as Win32Path);
+      } else if (selectedEnvironment.value === 'winpackaged') {
+         resolvedPath = await resolveWindowsApplicationDataPath(path as WindowsApplicationDataPath);
       } else {
-         throw new Error(`Unsupported platform: ${os}`);
+         throw new Error(`Unsupported platform: ${selectedEnvironment.value}`);
       }
 
       selectedPathResolved.value = resolvedPath;
@@ -82,27 +96,23 @@ const resetSelectedPath = () => {
    didPathResolutionFail.value = false;
 };
 
-const directories = computed(() => {
-   if (os === 'android') {
-      if (androidPathType.value === 'path') {
+const directories: ComputedRef<string[]> = computed(() => {
+   
+   switch (selectedEnvironment.value) {
+      case 'android':
          return [...Object.values(AndroidPath) as string[]];
-      } else {
-         return [...Object.values(AndroidPathCollection) as string[]];
-      }
-   } else if (os === 'ios') {
-      return [...Object.values(IosPath) as string[]];
-   }  else if (os === 'linux') {
-      return [...Object.values(LinuxPath) as string[]];
-   } else if (os === 'macos') {
-      return [...Object.values(MacPath) as string[]];
-   } else if (os === 'windows') {
-      if (windowsPathType.value === 'win32') {
+      case 'ios':
+         return [...Object.values(IosPath) as string[]];
+      case 'linux':
+         return [...Object.values(LinuxPath) as string[]];
+      case 'macos':
+         return [...Object.values(MacPath) as string[]];
+      case 'win32':
          return [...Object.values(Win32Path) as string[]];
-      } else {
+      case 'winpackaged':
          return [...Object.values(WindowsApplicationDataPath) as string[]];
-      }
-   } else {
-      throw new Error(`Unsupported platform: ${os}`);
+      default:
+         return [];
    }
 });
 
@@ -110,8 +120,13 @@ watch (androidPathType, () => {
    resetSelectedPath();
 });
 
-watch (windowsPathType, () => {
+watch (selectedEnvironment, () => {
    resetSelectedPath();
+});
+
+onMounted(async () => {
+   detectedEnvironment.value = await getFsEnvironment();
+   selectedEnvironment.value = detectedEnvironment.value;
 });
 
 </script>

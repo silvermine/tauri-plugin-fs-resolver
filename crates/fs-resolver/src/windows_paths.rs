@@ -1,28 +1,6 @@
 use serde::Deserialize;
 use std::fmt::Display;
 
-/// Tagged union that mirrors the Rust `WindowsPath` enum's serde representation.
-/// Callers pick whichever variant fits their packaging model; the Rust side
-/// deserializes using the tag key (`win32` or `winMsix`).
-/// Which one to use is determined by the caller, based on the packaging model.
-/// If the process is intended to run in a packaged (MSIX) app context, the `WinMsix` variant should be used.
-/// If the process is intended to run in a unpackaged (Win32) app context, the `Win32` variant should be used.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum WindowsPath {
-   Win32(Win32Path),
-   WinMsix(WindowsApplicationDataPath),
-}
-
-impl Display for WindowsPath {
-   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match self {
-         WindowsPath::Win32(path) => write!(f, "win32::{}", path),
-         WindowsPath::WinMsix(path) => write!(f, "winmsix::{}", path),
-      }
-   }
-}
-
 // Taken from KNOWNFOLDERID:
 // https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
 // These are meant to be used for Win32 applications packaged as MSI.
@@ -536,7 +514,7 @@ impl Display for Win32Path {
 
 // Taken from here:
 // https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata?view=winrt-28000#properties
-// These are meant to be used for Win32 applications packaged as MSIX.
+// These are meant to be used for packaged applications.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum WindowsApplicationDataPath {

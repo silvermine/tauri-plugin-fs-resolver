@@ -1,11 +1,12 @@
 use std::path::Component;
 
+use crate::WindowsApplicationDataPath;
 use crate::android_paths::AndroidPath;
 use crate::error::{Error, Result};
 use crate::ios_paths::IosPath;
 use crate::linux_paths::LinuxPath;
 use crate::mac_paths::MacPath;
-use crate::windows_paths::WindowsPath;
+use crate::windows_paths::Win32Path;
 
 /// Per-platform path mapping: a platform path enum plus an optional relative suffix.
 ///
@@ -21,6 +22,15 @@ pub struct PlatformMapping<T: PlatformPath> {
    pub relative_path: Option<String>,
 }
 
+/// In a packaged app, either an ApplicationDataPath or a Win32Path can be used.
+/// With this in mind, we need to allow a CrossPlatformMapping to support both of these paths
+/// when defining the mapping used for a packaged app.
+#[derive(Debug)]
+pub enum WinPackagedPathMapping {
+   WindowsApplicationDataPath(PlatformMapping<WindowsApplicationDataPath>),
+   Win32Path(PlatformMapping<Win32Path>),
+}
+
 /// Cross-platform path definition with optional per-OS mappings.
 ///
 /// Parallel to the TypeScript `CrossPlatformMapping` type. Each platform field holds a
@@ -32,7 +42,8 @@ pub struct CrossPlatformMapping {
    pub ios: Option<PlatformMapping<IosPath>>,
    pub macos: Option<PlatformMapping<MacPath>>,
    pub linux: Option<PlatformMapping<LinuxPath>>,
-   pub windows: Option<PlatformMapping<WindowsPath>>,
+   pub win32: Option<PlatformMapping<Win32Path>>,
+   pub win_packaged: Option<WinPackagedPathMapping>,
 }
 
 /// Validates that `relative_path` contains only normal path segments.
@@ -89,17 +100,20 @@ pub trait PlatformPath: private::Sealed {}
 mod private {
    pub trait Sealed {}
 }
+
 impl private::Sealed for AndroidPath {}
 impl private::Sealed for IosPath {}
 impl private::Sealed for MacPath {}
 impl private::Sealed for LinuxPath {}
-impl private::Sealed for WindowsPath {}
+impl private::Sealed for Win32Path {}
+impl private::Sealed for WindowsApplicationDataPath {}
 
 impl PlatformPath for AndroidPath {}
 impl PlatformPath for IosPath {}
 impl PlatformPath for MacPath {}
 impl PlatformPath for LinuxPath {}
-impl PlatformPath for WindowsPath {}
+impl PlatformPath for Win32Path {}
+impl PlatformPath for WindowsApplicationDataPath {}
 
 #[cfg(test)]
 mod tests {

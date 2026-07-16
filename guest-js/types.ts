@@ -1,4 +1,21 @@
 /**
+ * The filesystem environment of the current operating system.
+ *
+ * This is used to determine the appropriate filesystem path resolution strategy.
+ *
+ * Q: Why do we need this enum instead of the string for std::env::consts::OS?
+ * A: This solves a specific Windows problem, where Windows can be either Win32
+ * or WinPackaged.
+ * The os string alone is not enough to determine the environment.
+ * Win32 paths can be resolved on both Win32 and WinPackaged, but WinPackaged paths
+ * cannot be resolved on Win32.
+ * Having a declaritive enum is the most robust solution for this problem,
+ * which allows us to determine the environment once at runtime and hold the value
+ * for the lifetime of the application.
+ */
+export type FsEnvironment = 'android' | 'ios' | 'linux' | 'macos' | 'win32' | 'winpackaged';
+
+/**
  * Android app directories.
  *
  * @see https://developer.android.com/reference/android/content/Context
@@ -460,16 +477,7 @@ export enum MacPath {
 }
 
 /**
- * Tagged union that mirrors the Rust `WindowsPath` enum's serde representation.
- * Callers pick whichever variant fits their packaging model; the Rust side
- * deserializes using the tag key (`win32` or `winMsix`).
- */
-export type WindowsPath =
-   | { win32: Win32Path }
-   | { winMsix: WindowsApplicationDataPath };
-
-/**
- * Win32 known folder paths for applications packaged as MSI.
+ * Win32 known folder paths for unpackaged applications.
  *
  * @see https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
  */
@@ -977,7 +985,7 @@ export enum Win32Path {
 }
 
 /**
- * Windows ApplicationData paths for applications packaged as MSIX.
+ * Windows ApplicationData paths for packaged applications.
  *
  * @see https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata?view=winrt-28000#properties
  */
