@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-resolve-win32-path"
+description = "Enables the resolve_win32_path command without any pre-configured scope."
+commands.allow = ["resolve_win32_path"]
+
+[[permission]]
+identifier = "deny-resolve-win32-path"
+description = "Denies the resolve_win32_path command without any pre-configured scope."
+commands.deny = ["resolve_win32_path"]

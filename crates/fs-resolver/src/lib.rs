@@ -1,5 +1,6 @@
 mod android_paths;
 mod error;
+mod fs_environment;
 mod ios_paths;
 mod ios_resolve;
 mod linux_paths;
@@ -13,9 +14,10 @@ mod windows_resolve;
 
 pub use android_paths::{AndroidPath, AndroidPathCollection};
 pub use error::{Error, Result};
+pub use fs_environment::FsEnvironment;
 pub use ios_paths::IosPath;
 pub use linux_paths::LinuxPath;
 pub use mac_paths::MacPath;
-pub use path_mapping::{CrossPlatformMapping, PlatformMapping};
+pub use path_mapping::{CrossPlatformMapping, PlatformMapping, WinPackagedPathMapping};
 pub use path_resolver::PathResolver;
-pub use windows_paths::{Win32Path, WindowsApplicationDataPath, WindowsPath};
+pub use windows_paths::{Win32Path, WindowsApplicationDataPath};

@@ -11,19 +11,23 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
    use fs_resolver::{
-      AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, PathResolver, WindowsPath,
+      AndroidPath, AndroidPathCollection, FsEnvironment, IosPath, LinuxPath, MacPath, PathResolver,
+      Result, Win32Path, WindowsApplicationDataPath,
    };
-   use fs_resolver::{Result, Win32Path};
-
    use std::path::PathBuf;
+   use test_case::test_case;
 
-   const AVAILABLE_OS: [&str; 5] = ["android", "ios", "linux", "macos", "windows"];
+   #[test_case(FsEnvironment::Android)]
+   #[test_case(FsEnvironment::Ios)]
+   #[test_case(FsEnvironment::Linux)]
+   #[test_case(FsEnvironment::Macos)]
+   #[test_case(FsEnvironment::Win32)]
+   #[test_case(FsEnvironment::WinPackaged)]
+   fn test_path_resolver(environment: FsEnvironment) {
+      let resolver = create_test_resolver(environment.clone());
 
-   #[test]
-   fn test_path_resolver() {
-      for os in AVAILABLE_OS {
-         let resolver = create_test_resolver(os);
-         if os == "android" {
+      match environment {
+         FsEnvironment::Android => {
             let resolved = resolver.resolve_android(&AndroidPath::DataDir);
             assert_eq!(resolved.unwrap(), PathBuf::from("android/dataDir"));
             let resolved =
@@ -33,36 +37,37 @@ mod tests {
                vec![PathBuf::from("android/externalCacheDirs")]
             );
          }
-
-         if os == "ios" {
+         FsEnvironment::Ios => {
             let resolved = resolver.resolve_ios(&IosPath::DocumentDirectory);
             assert_eq!(resolved.unwrap(), PathBuf::from("ios/documentDirectory"));
          }
-
-         if os == "linux" {
+         FsEnvironment::Linux => {
             let resolved = resolver.resolve_linux(&LinuxPath::DataHome);
             assert_eq!(resolved.unwrap(), PathBuf::from("linux/dataHome"));
          }
-
-         if os == "macos" {
+         FsEnvironment::Macos => {
             let resolved = resolver.resolve_mac(&MacPath::ApplicationDirectory);
             assert_eq!(
                resolved.unwrap(),
                PathBuf::from("apple/applicationDirectory")
             );
          }
-
-         if os == "windows" {
-            let resolved = resolver.resolve_windows(&WindowsPath::Win32(Win32Path::LocalAppData));
+         FsEnvironment::Win32 => {
+            let resolved = resolver.resolve_win32(&Win32Path::LocalAppData);
+            assert_eq!(resolved.unwrap(), PathBuf::from("win32/localAppData"));
+         }
+         FsEnvironment::WinPackaged => {
+            let resolved =
+               resolver.resolve_windows_application_data(&WindowsApplicationDataPath::LocalFolder);
             assert_eq!(
                resolved.unwrap(),
-               PathBuf::from("windows/win32::localAppData")
+               PathBuf::from("windowsApplicationData/localFolder")
             );
          }
       }
    }
 
-   fn create_test_resolver(platform: &str) -> PathResolver {
+   fn create_test_resolver(environment: FsEnvironment) -> PathResolver {
       let resolve_android = Box::new(|path: &AndroidPath| -> Result<PathBuf> {
          Ok(PathBuf::from(format!("android/{}", path)))
       });
@@ -80,18 +85,23 @@ mod tests {
       let resolve_mac = Box::new(|path: &MacPath| -> Result<PathBuf> {
          Ok(PathBuf::from(format!("apple/{}", path)))
       });
-      let resolve_windows = Box::new(|path: &WindowsPath| -> Result<PathBuf> {
-         Ok(PathBuf::from(format!("windows/{}", path)))
+      let resolve_win32 = Box::new(|path: &Win32Path| -> Result<PathBuf> {
+         Ok(PathBuf::from(format!("win32/{}", path)))
       });
+      let resolve_windows_application_data =
+         Box::new(|path: &WindowsApplicationDataPath| -> Result<PathBuf> {
+            Ok(PathBuf::from(format!("windowsApplicationData/{}", path)))
+         });
 
       PathResolver::new_for_test(
-         platform.to_string(),
+         environment,
          resolve_android,
          resolve_android_path_collection,
          resolve_ios,
          resolve_linux,
          resolve_mac,
-         resolve_windows,
+         resolve_win32,
+         resolve_windows_application_data,
       )
    }
 }

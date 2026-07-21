@@ -3124,6 +3124,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-fs-resolver",
  "tauri-plugin-os",
+ "test-case",
 ]
 
 [[package]]

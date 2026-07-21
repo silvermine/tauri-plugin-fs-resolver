@@ -7,14 +7,21 @@ pub enum Error {
    #[error("Initialization error: {0}")]
    Initialization(String),
 
+   #[error("Unsupported environment: {0}")]
+   UnsupportedEnvironment(String),
+
    #[error("Invalid path: {0}")]
    InvalidPath(String),
 
    #[error("Path mapping undefined for OS: {0}")]
    PathMappingUndefined(String),
 
-   #[error("Unsupported platform: {0}")]
-   UnsupportedPlatform(String),
+   #[error("win_packaged mapping is missing while running as WinPackaged.
+resolve_mapping does not fall back to win32. Set win_packaged explicitly:
+WinPackagedPathMapping::WindowsApplicationDataPath(...) or
+WinPackagedPathMapping::Win32Path(...) (same known folder as unpackaged if that is intentional).
+Note: resolve_win32 still works under WinPackaged; only cross-platform mapping has this specific requirement.")]
+   WinPackagedPathMappingUndefined,
 
    #[error("Incorrect OS for path {path}: current OS is {current_os}, invoked for {expected_os}")]
    IncorrectOS {
@@ -42,15 +49,27 @@ pub enum Error {
       hint: String,
    },
 
-   #[error(
-      "Win32 path invoked from MSIX packaged context; make sure to use the WindowsPath::WindowsApplicationDataPath variant instead"
-   )]
-   Win32PathInvokedFromMsixPackagedContext,
+   #[error("Could not determine Windows packaging environment: {0}")]
+   CouldNotDetermineWindowsPackagingEnvironment(String),
+
+   #[error("Attempted determining Windows packaging environment on non-Windows platform")]
+   AttemptedDeterminingWindowsPackagingEnvironmentOnNonWindowsPlatform,
+
+   #[error("Could not retrieve current package: {0}; Current Package retrieval error: {1}")]
+   CouldNotRetrieveCurrentPackage(String, String),
+
+   #[error("Could not retrieve ID from package: {0}; Current Package retrieval error: {1}")]
+   CouldNotRetrieveIdFromPackage(String, String),
 
    #[error(
-      "WindowsApplicationDataPath invoked from unpackaged context; make sure to use the WindowsPath::Win32Path variant instead"
+      "Could not retrieve family name from package: {0}; Current Package retrieval error: {1}"
    )]
-   WindowsApplicationDataPathInvokedFromWin32Context,
+   CouldNotRetrieveFamilyNameFromPackage(String, String),
+
+   #[error(
+      "Could not create ApplicationData for package family: {0}; Current Package retrieval error: {1}"
+   )]
+   CouldNotCreateApplicationDataForPackageFamily(String, String),
 }
 
 /// Serialize errors as plain strings for the Tauri IPC bridge.

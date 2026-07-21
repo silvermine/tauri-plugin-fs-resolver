@@ -9,9 +9,19 @@ import {
    resolveIosPath,
    resolveLinuxPath,
    resolveMacPath,
-   resolveWindowsPath,
+   resolveWin32Path,
 } from './index';
-import { AndroidPath, AndroidPathCollection, IosPath, LinuxPath, MacPath, Win32Path, WindowsApplicationDataPath } from './types';
+import {
+   AndroidPath,
+   AndroidPathCollection,
+   FsEnvironment,
+   IosPath,
+   LinuxPath,
+   MacPath,
+   Win32Path,
+   WindowsApplicationDataPath,
+} from './types';
+import { clearFsEnvironmentCache, resolveWindowsApplicationDataPath } from './platform-paths';
 
 const resolvedAndroidPath = 'android_path',
       resolvedAndroidPathCollection = [ 'android_path_1', 'android_path_2' ],
@@ -23,13 +33,12 @@ const resolvedAndroidPath = 'android_path',
 
 let lastCmd = '',
     lastArgs: Record<string, unknown> = {},
-    mockPlatform: '' | 'android' | 'ios' | 'linux' | 'macos' | 'windows' = '';
+    mockFsEnvironment: FsEnvironment | undefined;
 
-vi.mock('@tauri-apps/plugin-os', () => {
-   return {
-      platform: () => { return mockPlatform; },
-   };
-});
+function setMockFsEnvironment(environment: FsEnvironment): void {
+   clearFsEnvironmentCache();
+   mockFsEnvironment = environment;
+}
 
 beforeEach(() => {
    mockIPC((cmd, args) => {
@@ -51,17 +60,16 @@ beforeEach(() => {
       if (cmd === 'plugin:fs-resolver|resolve_mac_path') {
          return resolvedMacPath;
       }
-      if (cmd === 'plugin:fs-resolver|resolve_windows_path') {
-         const pathObj = lastArgs.path as Record<string, unknown>;
-
-         if ('win32' in pathObj) {
-            return resolvedWin32Path;
-         }
-         if ('winMsix' in pathObj) {
-            return resolvedWindowsApplicationDataPath;
-         }
-         return undefined;
+      if (cmd === 'plugin:fs-resolver|resolve_win32_path') {
+         return resolvedWin32Path;
       }
+      if (cmd === 'plugin:fs-resolver|resolve_windows_application_data_path') {
+         return resolvedWindowsApplicationDataPath;
+      }
+      if (cmd === 'plugin:fs-resolver|get_fs_environment') {
+         return mockFsEnvironment;
+      }
+
       return undefined;
    });
 });
@@ -70,7 +78,7 @@ afterEach(() => { return clearMocks(); });
 
 describe('fs-resolver actions map to Tauri commands', () => {
    it('resolveAndroidPath — sends path, returns resolved path', async () => {
-      mockPlatform = 'android';
+      setMockFsEnvironment('android');
       const resolvedPath = await resolveAndroidPath(AndroidPath.DataDir);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_android_path');
@@ -79,7 +87,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveAndroidPathCollection — sends collection, returns resolved paths', async () => {
-      mockPlatform = 'android';
+      setMockFsEnvironment('android');
       const resolvedPaths = await resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_android_path_collection');
@@ -88,7 +96,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveIosPath — sends path, returns resolved path', async () => {
-      mockPlatform = 'ios';
+      setMockFsEnvironment('ios');
       const resolvedPath = await resolveIosPath(IosPath.CachesDirectory);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_ios_path');
@@ -97,7 +105,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveLinuxPath — sends path, returns resolved path', async () => {
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       const resolvedPath = await resolveLinuxPath(LinuxPath.DataHome);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_linux_path');
@@ -106,7 +114,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveLinuxPath — supports ForCurrentApp variants', async () => {
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       const resolvedPath = await resolveLinuxPath(LinuxPath.DataHomeForCurrentApp);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_linux_path');
@@ -115,7 +123,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveMacPath — sends path, returns resolved path', async () => {
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       const resolvedPath = await resolveMacPath(MacPath.CachesDirectory);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_mac_path');
@@ -124,7 +132,7 @@ describe('fs-resolver actions map to Tauri commands', () => {
    });
 
    it('resolveMacPath — supports ForCurrentApp variants', async () => {
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       const resolvedPath = await resolveMacPath(MacPath.ApplicationSupportDirectoryForCurrentApp);
 
       expect(lastCmd).toBe('plugin:fs-resolver|resolve_mac_path');
@@ -132,122 +140,164 @@ describe('fs-resolver actions map to Tauri commands', () => {
       expect(resolvedPath).toBe(resolvedMacPath);
    });
 
-   it('resolveWindowsPath — sends Win32 path, returns resolved path', async () => {
-      mockPlatform = 'windows';
-      const resolvedPath = await resolveWindowsPath({ win32: Win32Path.LocalAppData });
+   it('resolveWin32Path — sends Win32 path, returns resolved path', async () => {
+      setMockFsEnvironment('win32');
+      const resolvedPath = await resolveWin32Path(Win32Path.LocalAppData);
 
-      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_path');
-      expect(lastArgs.path).toEqual({ win32: Win32Path.LocalAppData });
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_win32_path');
+      expect(lastArgs.path).toEqual(Win32Path.LocalAppData);
       expect(resolvedPath).toBe(resolvedWin32Path);
    });
 
-   it('resolveWindowsPath — supports Win32 ForCurrentApp variants', async () => {
-      mockPlatform = 'windows';
-      const resolvedPath = await resolveWindowsPath({ win32: Win32Path.RoamingAppDataForCurrentApp });
+   it('resolveWin32Path — supports Win32 ForCurrentApp variants', async () => {
+      setMockFsEnvironment('win32');
+      const resolvedPath = await resolveWin32Path(Win32Path.RoamingAppDataForCurrentApp);
 
-      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_path');
-      expect(lastArgs.path).toEqual({ win32: Win32Path.RoamingAppDataForCurrentApp });
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_win32_path');
+      expect(lastArgs.path).toEqual(Win32Path.RoamingAppDataForCurrentApp);
       expect(resolvedPath).toBe(resolvedWin32Path);
    });
 
-   it('resolveWindowsPath — sends WindowsApplicationDataPath path, returns resolved path', async () => {
-      mockPlatform = 'windows';
-      const resolvedPath = await resolveWindowsPath({ winMsix: WindowsApplicationDataPath.LocalFolder });
+   it('resolveWin32Path when in winpackaged environment — sends Win32 path, returns resolved path', async () => {
+      setMockFsEnvironment('winpackaged');
+      const resolvedPath = await resolveWin32Path(Win32Path.LocalAppData);
 
-      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_path');
-      expect(lastArgs.path).toEqual({ winMsix: WindowsApplicationDataPath.LocalFolder });
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_win32_path');
+      expect(lastArgs.path).toEqual(Win32Path.LocalAppData);
+      expect(resolvedPath).toBe(resolvedWin32Path);
+   });
+
+   it('resolveWindowsApplicationDataPath — sends WindowsApplicationDataPath, returns resolved path', async () => {
+      setMockFsEnvironment('winpackaged');
+      const resolvedPath = await resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder);
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_application_data_path');
+      expect(lastArgs.path).toEqual(WindowsApplicationDataPath.LocalFolder);
       expect(resolvedPath).toBe(resolvedWindowsApplicationDataPath);
    });
 });
 
 describe('fs-resolver errors when calling from incorrect platform', () => {
-   const androidErrorMsg = 'This function is only available on Android',
-         iosErrorMsg = 'This function is only available on iOS',
-         linuxErrorMsg = 'This function is only available on Linux',
-         macosErrorMsg = 'This function is only available on macOS',
-         windowsErrorMsg = 'This function is only available on Windows';
+   const androidErrorMsg = 'This function is only available on android',
+         iosErrorMsg = 'This function is only available on ios',
+         linuxErrorMsg = 'This function is only available on linux',
+         macosErrorMsg = 'This function is only available on macos',
+         win32ErrorMsg = 'This function is only available on win32 or winpackaged',
+         winpackagedErrorMsg = 'This function is only available on winpackaged';
 
    it('resolveAndroidPath — throws error if not on Android', async () => {
-      mockPlatform = 'ios';
+      setMockFsEnvironment('ios');
       await expect(resolveAndroidPath(AndroidPath.DataDir)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       await expect(resolveAndroidPath(AndroidPath.DataDir)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       await expect(resolveAndroidPath(AndroidPath.DataDir)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'windows';
+      setMockFsEnvironment('win32');
+      await expect(resolveAndroidPath(AndroidPath.DataDir)).rejects.toThrow(androidErrorMsg);
+
+      setMockFsEnvironment('winpackaged');
       await expect(resolveAndroidPath(AndroidPath.DataDir)).rejects.toThrow(androidErrorMsg);
    });
 
    it('resolveAndroidPathCollection — throws error if not on Android', async () => {
-      mockPlatform = 'ios';
+      setMockFsEnvironment('ios');
       await expect(resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       await expect(resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       await expect(resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs)).rejects.toThrow(androidErrorMsg);
 
-      mockPlatform = 'windows';
+      setMockFsEnvironment('win32');
+      await expect(resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs)).rejects.toThrow(androidErrorMsg);
+
+      setMockFsEnvironment('winpackaged');
       await expect(resolveAndroidPathCollection(AndroidPathCollection.ExternalCacheDirs)).rejects.toThrow(androidErrorMsg);
    });
 
    it('resolveIosPath — throws error if not on iOS', async () => {
-      mockPlatform = 'android';
+      setMockFsEnvironment('android');
       await expect(resolveIosPath(IosPath.CachesDirectory)).rejects.toThrow(iosErrorMsg);
 
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       await expect(resolveIosPath(IosPath.CachesDirectory)).rejects.toThrow(iosErrorMsg);
 
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       await expect(resolveIosPath(IosPath.CachesDirectory)).rejects.toThrow(iosErrorMsg);
 
-      mockPlatform = 'windows';
+      setMockFsEnvironment('win32');
+      await expect(resolveIosPath(IosPath.CachesDirectory)).rejects.toThrow(iosErrorMsg);
+
+      setMockFsEnvironment('winpackaged');
       await expect(resolveIosPath(IosPath.CachesDirectory)).rejects.toThrow(iosErrorMsg);
    });
 
    it('resolveLinuxPath — throws error if not on Linux', async () => {
-      mockPlatform = 'android';
+      setMockFsEnvironment('android');
       await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
-      mockPlatform = 'ios';
+      setMockFsEnvironment('ios');
       await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
-      mockPlatform = 'macos';
+      setMockFsEnvironment('macos');
       await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
 
-      mockPlatform = 'windows';
+      setMockFsEnvironment('win32');
+      await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
+
+      setMockFsEnvironment('winpackaged');
       await expect(resolveLinuxPath(LinuxPath.DataHome)).rejects.toThrow(linuxErrorMsg);
    });
 
    it('resolveMacPath — throws error if not on macOS', async () => {
-      mockPlatform = 'android';
+      setMockFsEnvironment('android');
       await expect(resolveMacPath(MacPath.CachesDirectory)).rejects.toThrow(macosErrorMsg);
 
-      mockPlatform = 'ios';
+      setMockFsEnvironment('ios');
       await expect(resolveMacPath(MacPath.CachesDirectory)).rejects.toThrow(macosErrorMsg);
 
-      mockPlatform = 'linux';
+      setMockFsEnvironment('linux');
       await expect(resolveMacPath(MacPath.CachesDirectory)).rejects.toThrow(macosErrorMsg);
 
-      mockPlatform = 'windows';
+      setMockFsEnvironment('win32');
+      await expect(resolveMacPath(MacPath.CachesDirectory)).rejects.toThrow(macosErrorMsg);
+
+      setMockFsEnvironment('winpackaged');
       await expect(resolveMacPath(MacPath.CachesDirectory)).rejects.toThrow(macosErrorMsg);
    });
 
-   it('resolveWindowsPath — throws error if not on Windows', async () => {
-      mockPlatform = 'android';
-      await expect(resolveWindowsPath({ win32: Win32Path.LocalAppData })).rejects.toThrow(windowsErrorMsg);
+   it('resolveWin32Path — throws error if not on Win32 or WinPackaged', async () => {
+      setMockFsEnvironment('android');
+      await expect(resolveWin32Path(Win32Path.LocalAppData)).rejects.toThrow(win32ErrorMsg);
 
-      mockPlatform = 'ios';
-      await expect(resolveWindowsPath({ win32: Win32Path.LocalAppData })).rejects.toThrow(windowsErrorMsg);
+      setMockFsEnvironment('ios');
+      await expect(resolveWin32Path(Win32Path.LocalAppData)).rejects.toThrow(win32ErrorMsg);
 
-      mockPlatform = 'linux';
-      await expect(resolveWindowsPath({ win32: Win32Path.LocalAppData })).rejects.toThrow(windowsErrorMsg);
+      setMockFsEnvironment('linux');
+      await expect(resolveWin32Path(Win32Path.LocalAppData)).rejects.toThrow(win32ErrorMsg);
 
-      mockPlatform = 'macos';
-      await expect(resolveWindowsPath({ win32: Win32Path.LocalAppData })).rejects.toThrow(windowsErrorMsg);
+      setMockFsEnvironment('macos');
+      await expect(resolveWin32Path(Win32Path.LocalAppData)).rejects.toThrow(win32ErrorMsg);
+   });
+
+   it('resolveWindowsApplicationDataPath — throws error if not on WinPackaged', async () => {
+      setMockFsEnvironment('android');
+      await expect(resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder)).rejects.toThrow(winpackagedErrorMsg);
+
+      setMockFsEnvironment('ios');
+      await expect(resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder)).rejects.toThrow(winpackagedErrorMsg);
+
+      setMockFsEnvironment('linux');
+      await expect(resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder)).rejects.toThrow(winpackagedErrorMsg);
+
+      setMockFsEnvironment('macos');
+      await expect(resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder)).rejects.toThrow(winpackagedErrorMsg);
+
+      setMockFsEnvironment('win32');
+      await expect(resolveWindowsApplicationDataPath(WindowsApplicationDataPath.LocalFolder)).rejects.toThrow(winpackagedErrorMsg);
    });
 });

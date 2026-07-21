@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the get_fs_environment command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-fs-environment",
+          "markdownDescription": "Enables the get_fs_environment command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_fs_environment command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-fs-environment",
+          "markdownDescription": "Denies the get_fs_environment command without any pre-configured scope."
+        },
+        {
           "description": "Enables the resolve_android_path command without any pre-configured scope.",
           "type": "string",
           "const": "allow-resolve-android-path",
@@ -355,22 +367,34 @@
           "markdownDescription": "Denies the resolve_mac_path command without any pre-configured scope."
         },
         {
-          "description": "Enables the resolve_windows_path command without any pre-configured scope.",
+          "description": "Enables the resolve_win32_path command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-resolve-windows-path",
-          "markdownDescription": "Enables the resolve_windows_path command without any pre-configured scope."
+          "const": "allow-resolve-win32-path",
+          "markdownDescription": "Enables the resolve_win32_path command without any pre-configured scope."
         },
         {
-          "description": "Denies the resolve_windows_path command without any pre-configured scope.",
+          "description": "Denies the resolve_win32_path command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-resolve-windows-path",
-          "markdownDescription": "Denies the resolve_windows_path command without any pre-configured scope."
+          "const": "deny-resolve-win32-path",
+          "markdownDescription": "Denies the resolve_win32_path command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-windows-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`",
+          "description": "Enables the resolve_windows_application_data_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-resolve-windows-application-data-path",
+          "markdownDescription": "Enables the resolve_windows_application_data_path command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the resolve_windows_application_data_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-resolve-windows-application-data-path",
+          "markdownDescription": "Denies the resolve_windows_application_data_path command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-get-fs-environment`\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-win32-path`\n- `allow-resolve-windows-application-data-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-windows-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`"
+          "markdownDescription": "Default permissions for fs-resolver plugin (all resolve commands)\n#### This default permission set includes:\n\n- `allow-get-fs-environment`\n- `allow-resolve-mac-path`\n- `allow-resolve-ios-path`\n- `allow-resolve-linux-path`\n- `allow-resolve-win32-path`\n- `allow-resolve-windows-application-data-path`\n- `allow-resolve-android-path`\n- `allow-resolve-android-path-collection`"
         }
       ]
     }
