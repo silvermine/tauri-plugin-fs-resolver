@@ -24,7 +24,16 @@ npm run example:init:android
 npm run example:dev:android
 ```
 
-See the [main README](../../README.md#ios-setup) for iOS device setup
+After upgrading Tauri or this plugin, regenerate the Android project:
+
+```bash
+rm -rf examples/tauri-app/src-tauri/gen/android
+npm run example:init:android
+```
+
+See [Android host requirements](../../README.md#android-host-requirements) in the
+main README for Gradle/AGP versions. See the [main README](../../README.md#ios-setup)
+for iOS device setup
 (development team, device trust).
 
 ## Linux (GTK / WebKit rendering)

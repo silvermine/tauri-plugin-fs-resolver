@@ -949,6 +949,25 @@ npm run example:init:android   # first time only
 npm run example:dev:android
 ```
 
+#### Android host requirements
+
+Host apps that consume this plugin's Android Gradle project need a Tauri **2.12**
+(or newer) mobile toolchain aligned with the plugin's
+[`android/build.gradle.kts`](android/build.gradle.kts):
+
+   * **compileSdk 37** (set in the plugin module).
+   * **Android Gradle Plugin ≥ 9.1.1** (required for API 37). Prefer versions from
+     Tauri **2.12** `tauri android init` (e.g. AGP **9.3.1**).
+   * **Gradle ≥ 9.3.1** for AGP 9.1.x; prefer the Gradle version from Tauri init
+     (e.g. **9.6.1**). The plugin's `kotlin { compilerOptions { ... } }` DSL needs
+     Gradle **8.13+** in general, but **compileSdk 37** forces the higher AGP/Gradle
+     floor above—not Gradle 8.13 alone.
+   * **Kotlin Gradle Plugin 1.9.x or 2.x** (the plugin uses `compilerOptions`, not
+     `kotlinOptions`).
+
+After upgrading Tauri or this plugin, regenerate the example Android project; see
+[Example app — Running](examples/tauri-app/README.md#running).
+
 #### Known Linux Issue
 
 On some Linux devices (e.g. Raspberry Pi), the example window may show WebKit

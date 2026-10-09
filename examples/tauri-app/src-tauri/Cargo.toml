@@ -16,12 +16,12 @@ name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.2.0", features = [] }
+tauri-build = { version = "2.7.1", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.3", features = [] }
+tauri = { version = "2.12.0", features = [] }
 tauri-plugin-fs-resolver = { path = "../../../" }
-tauri-plugin-os = { version = "2.3.2", features = [] }
+tauri-plugin-os = { version = "2.4.0", features = [] }
 
 [dev-dependencies]
 fs-resolver = { path = "../../../crates/fs-resolver", features = ["test-helpers"] }

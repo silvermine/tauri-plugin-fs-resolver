@@ -14,13 +14,13 @@
     "dev:msix": "powershell -File ./scripts/run-msix.ps1"
   },
   "dependencies": {
-   "@tauri-apps/api": "2.5.0",
+    "@tauri-apps/api": "2.12.0",
     "vue": "3.5.13",
     "tauri-plugin-fs-resolver": "file:../../",
-   "@tauri-apps/plugin-os": "2.3.2"
+    "@tauri-apps/plugin-os": "2.4.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.5.0",
+    "@tauri-apps/cli": "2.12.0",
     "@vitejs/plugin-vue": "5.2.1",
     "typescript": "5.6.2",
     "vite": "6.0.3",
