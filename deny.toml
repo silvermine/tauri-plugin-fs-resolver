@@ -1,6 +1,7 @@
 # Leave targets unrestricted so platform-specific dependencies are checked too.
 [graph]
 all-features = true
+exclude = ["tauri-app"]
 
 [advisories]
 unmaintained = "all"
