@@ -12,7 +12,7 @@ pub fn run() {
 mod tests {
    use fs_resolver::{
       AndroidPath, AndroidPathCollection, FsEnvironment, IosPath, LinuxPath, MacPath, PathResolver,
-      Result, Win32Path, WindowsApplicationDataPath,
+      Result, Win32Path, WindowsApplicationDataPath, WindowsLibrary,
    };
    use std::path::PathBuf;
 
@@ -114,6 +114,11 @@ mod tests {
             Ok(PathBuf::from(format!("windowsApplicationData/{}", path)))
          });
 
+      let resolve_windows_library_dirs =
+         Box::new(|library: &WindowsLibrary| -> Result<Vec<PathBuf>> {
+            Ok(vec![PathBuf::from(format!("windowsLibrary/{}", library))])
+         });
+
       PathResolver::new_for_test(
          environment,
          resolve_android,
@@ -123,6 +128,7 @@ mod tests {
          resolve_mac,
          resolve_win32,
          resolve_windows_application_data,
+         resolve_windows_library_dirs,
       )
    }
 }

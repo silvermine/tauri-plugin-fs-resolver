@@ -9,17 +9,46 @@
             <input type="radio" value="collection" v-model="androidPathType" /> Collection
          </label>
       </div>
-      <div v-if="selectedEnvironment === 'win32' || selectedEnvironment === 'winpackaged'">
+      <div
+         v-if="
+            selectedEnvironment === 'win32'
+            || selectedEnvironment === 'winpackaged'
+            || selectedEnvironment === 'winlibrary'
+         "
+         class="radio-button-container"
+      >
          <label class="radio-button">
             <input type="radio" value="win32" v-model="selectedEnvironment" /> Win32
          </label>
          <label class="radio-button">
             <input type="radio" value="winpackaged" v-model="selectedEnvironment" /> WinPackaged
          </label>
+         <label class="radio-button">
+            <input type="radio" value="winlibrary" v-model="selectedEnvironment" /> WinLibrary
+         </label>
       </div>
+      <h2 v-if="selectedEnvironment === 'winlibrary'" class="section-title">Windows Libraries</h2>
+      <p v-if="selectedEnvironment === 'winlibrary'" class="section-hint">
+         Member folders pinned in each library (not the .library-ms definition path). Buttons
+         list each <code>WindowsLibrary</code> variant (including camera roll).
+      </p>
       <div class="path-container">
          <p class="selected-path">{{ selectedPath }}</p>
-         <p class="selected-path-resolved" :class="{ 'failed': didPathResolutionFail }">{{ selectedPathResolved }}</p>
+         <p
+            v-if="selectedEnvironment !== 'winlibrary' || didPathResolutionFail"
+            class="selected-path-resolved"
+            :class="{ 'failed': didPathResolutionFail }"
+         >{{ selectedPathResolved }}</p>
+         <p
+            v-else-if="selectedEnvironment === 'winlibrary' && selectedPath !== 'none selected'"
+            class="selected-path-resolved"
+         >{{ selectedPathResolved }}</p>
+         <ul
+            v-if="selectedEnvironment === 'winlibrary' && resolvedLibraryDirs.length && !didPathResolutionFail"
+            class="library-paths"
+         >
+            <li v-for="libraryDir in resolvedLibraryDirs" :key="libraryDir">{{ libraryDir }}</li>
+         </ul>
       </div>
       <div class="directory-grid">
          <button v-for="directory in directories" :key="directory" @click="resolvePath(directory)">
@@ -32,34 +61,40 @@
 <script setup lang="ts">
 
 import { ref, computed, watch, onMounted, ComputedRef } from 'vue';
-import { 
-   AndroidPath, 
-   AndroidPathCollection, 
-   IosPath, 
-   LinuxPath, 
-   MacPath, 
-   Win32Path, 
-   WindowsApplicationDataPath, 
+import {
+   AndroidPath,
+   AndroidPathCollection,
+   IosPath,
+   LinuxPath,
+   MacPath,
+   Win32Path,
+   WindowsApplicationDataPath,
+   WindowsLibrary,
    getFsEnvironment,
-   resolveAndroidPath, 
-   resolveAndroidPathCollection, 
-   resolveIosPath, 
-   resolveLinuxPath, 
-   resolveMacPath, 
-   resolveWin32Path, 
+   resolveAndroidPath,
+   resolveAndroidPathCollection,
+   resolveIosPath,
+   resolveLinuxPath,
+   resolveMacPath,
+   resolveWin32Path,
    resolveWindowsApplicationDataPath,
+   resolveWindowsLibraryDirs,
    FsEnvironment,
- } from 'tauri-plugin-fs-resolver';
+} from 'tauri-plugin-fs-resolver';
+
+type DemoEnvironment = FsEnvironment | 'winlibrary';
 
 const selectedPath = ref<string>('none selected'),
       selectedPathResolved = ref<string>('none resolved'),
+      resolvedLibraryDirs = ref<string[]>([]),
       androidPathType = ref<'path' | 'collection'>('path'),
       detectedEnvironment = ref<FsEnvironment>('android'),
-      selectedEnvironment = ref<FsEnvironment>('android'),
+      selectedEnvironment = ref<DemoEnvironment>('android'),
       didPathResolutionFail = ref(false);
 
 const resolvePath = async (path: string) => {
    selectedPath.value = path;
+   resolvedLibraryDirs.value = [];
    try {
       didPathResolutionFail.value = false;
       let resolvedPath: string = '';
@@ -79,6 +114,10 @@ const resolvePath = async (path: string) => {
          resolvedPath = await resolveWin32Path(path as Win32Path);
       } else if (selectedEnvironment.value === 'winpackaged') {
          resolvedPath = await resolveWindowsApplicationDataPath(path as WindowsApplicationDataPath);
+      } else if (selectedEnvironment.value === 'winlibrary') {
+         const dirs = await resolveWindowsLibraryDirs(path as WindowsLibrary);
+         resolvedLibraryDirs.value = dirs;
+         resolvedPath = dirs.length ? `${dirs.length} folder(s)` : '(empty)';
       } else {
          throw new Error(`Unsupported platform: ${selectedEnvironment.value}`);
       }
@@ -86,6 +125,7 @@ const resolvePath = async (path: string) => {
       selectedPathResolved.value = resolvedPath;
    } catch (error) {
       didPathResolutionFail.value = true;
+      resolvedLibraryDirs.value = [];
       selectedPathResolved.value = error instanceof Error ? error.message : (error as any).toString();
    }
 };
@@ -93,11 +133,12 @@ const resolvePath = async (path: string) => {
 const resetSelectedPath = () => {
    selectedPath.value = 'none selected';
    selectedPathResolved.value = 'none resolved';
+   resolvedLibraryDirs.value = [];
    didPathResolutionFail.value = false;
 };
 
 const directories: ComputedRef<string[]> = computed(() => {
-   
+
    switch (selectedEnvironment.value) {
       case 'android':
          return [...Object.values(AndroidPath) as string[]];
@@ -111,6 +152,8 @@ const directories: ComputedRef<string[]> = computed(() => {
          return [...Object.values(Win32Path) as string[]];
       case 'winpackaged':
          return [...Object.values(WindowsApplicationDataPath) as string[]];
+      case 'winlibrary':
+         return [...Object.values(WindowsLibrary) as string[]];
       default:
          return [];
    }
@@ -186,6 +229,29 @@ html, body {
    margin-bottom: 0.5rem;
 }
 
+.section-title {
+  margin: 0.25rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.section-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  text-align: left;
+  opacity: 0.85;
+}
+
+.library-paths {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  text-align: left;
+  overflow-wrap: break-word;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
 .selected-path {
   text-align: left;
   text-wrap: wrap;
@@ -256,7 +322,7 @@ button {
 }
 
 .radio-button input:checked {
-  background-color: #0f0f0f; 
+  background-color: #0f0f0f;
   color: #ffffff;
 }
 

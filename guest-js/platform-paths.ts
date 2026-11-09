@@ -7,6 +7,7 @@ import {
    LinuxPath,
    Win32Path,
    WindowsApplicationDataPath,
+   WindowsLibrary,
    FsEnvironment,
 } from './types';
 
@@ -115,6 +116,30 @@ export async function resolveWin32Path(path: Win32Path): Promise<string> {
    }
 
    return await invoke<string>('plugin:fs-resolver|resolve_win32_path', { path });
+}
+
+/**
+ * Resolves filesystem member folders for a Windows shell library.
+ *
+ * If this function is called on a platform other than Windows (WinPackaged or Win32),
+ * it will throw an error.
+ *
+ * **Results:** non-empty paths when members exist; an empty array when the library exists
+ * but the user removed every pinned folder; a rejected promise when the library
+ * definition is missing (`Windows shell library not found`) or COM resolution fails.
+ * See the plugin README *Windows shell libraries* section for rationale.
+ *
+ * @param library - The library whose member folders to resolve.
+ * @returns Absolute paths of pinned folders in Explorer order.
+ */
+export async function resolveWindowsLibraryDirs(library: WindowsLibrary): Promise<string[]> {
+   const environment = await getFsEnvironment();
+
+   if (environment !== 'win32' && environment !== 'winpackaged') {
+      throw new Error('This function is only available on win32 or winpackaged');
+   }
+
+   return await invoke<string[]>('plugin:fs-resolver|resolve_windows_library_dirs', { library });
 }
 
 /**

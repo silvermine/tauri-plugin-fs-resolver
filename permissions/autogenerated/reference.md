@@ -10,6 +10,7 @@ Default permissions for fs-resolver plugin (all resolve commands)
 - `allow-resolve-linux-path`
 - `allow-resolve-win32-path`
 - `allow-resolve-windows-application-data-path`
+- `allow-resolve-windows-library-dirs`
 - `allow-resolve-android-path`
 - `allow-resolve-android-path-collection`
 
@@ -226,6 +227,32 @@ Enables the resolve_windows_application_data_path command without any pre-config
 <td>
 
 Denies the resolve_windows_application_data_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-resolver:allow-resolve-windows-library-dirs`
+
+</td>
+<td>
+
+Enables the resolve_windows_library_dirs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-resolver:deny-resolve-windows-library-dirs`
+
+</td>
+<td>
+
+Denies the resolve_windows_library_dirs command without any pre-configured scope.
 
 </td>
 </tr>

@@ -73,6 +73,19 @@ Note: resolve_win32 still works under WinPackaged; only cross-platform mapping h
       "Could not create ApplicationData for package family: {0}; Current Package retrieval error: {1}"
    )]
    CouldNotCreateApplicationDataForPackageFamily(String, String),
+
+   /// The shell library definition does not exist or could not be loaded (distinct from a
+   /// library that exists but has zero pinned member folders).
+   #[error("Windows shell library not found: {library}")]
+   MissingWindowsLibrary { library: String },
+
+   /// COM or Shell Library API failure while resolving pinned member folders.
+   #[error("Windows shell library resolution failed for {library} at {step}: {reason}")]
+   WindowsShellLibraryResolutionFailed {
+      library: String,
+      step: &'static str,
+      reason: String,
+   },
 }
 
 /// Serialize errors as plain strings for the Tauri IPC bridge.

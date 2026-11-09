@@ -1,6 +1,47 @@
 use serde::Deserialize;
 use std::fmt::Display;
 
+/// Windows shell libraries (Documents, Music, Pictures, etc.).
+///
+/// Use [`PathResolver::resolve_windows_library_dirs`](crate::PathResolver::resolve_windows_library_dirs)
+/// to resolve **member folder paths** pinned in each library. This is not the same as
+/// [`Win32Path`] `*Library` variants, which resolve the library **definition**
+/// (the `.library-ms` file via `SHGetKnownFolderPath`).
+///
+/// Legacy libraries such as Recorded TV are not included here; use
+/// [`Win32Path::RecordedTVLibrary`] for the `.library-ms` definition path only.
+///
+/// See: <https://learn.microsoft.com/en-us/windows/win32/shell/library-be-library-aware>
+#[derive(Clone, Copy, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum WindowsLibrary {
+   /// User Documents library member folders.
+   Documents,
+   /// User Music library member folders.
+   Music,
+   /// User Pictures library member folders.
+   Pictures,
+   /// Camera Roll library member folders (Windows 8.1+).
+   CameraRoll,
+   /// Saved Pictures library member folders.
+   SavedPictures,
+   /// User Videos library member folders.
+   Video,
+}
+
+impl Display for WindowsLibrary {
+   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+         WindowsLibrary::Documents => write!(f, "documents"),
+         WindowsLibrary::Music => write!(f, "music"),
+         WindowsLibrary::Pictures => write!(f, "pictures"),
+         WindowsLibrary::CameraRoll => write!(f, "cameraRoll"),
+         WindowsLibrary::SavedPictures => write!(f, "savedPictures"),
+         WindowsLibrary::Video => write!(f, "video"),
+      }
+   }
+}
+
 // Taken from KNOWNFOLDERID:
 // https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
 // These are meant to be used for Win32 applications packaged as MSI.
@@ -22,6 +63,10 @@ pub enum Win32Path {
    // Camera roll photos.
    // %USERPROFILE%\Pictures\Camera Roll
    CameraRoll,
+
+   // Camera Roll library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::CameraRoll`] and `resolve_windows_library_dirs`.
+   CameraRollLibrary,
 
    // Staging area for burning CDs/DVDs.
    // %LOCALAPPDATA%\Microsoft\Windows\Burn\Burn
@@ -71,7 +116,8 @@ pub enum Win32Path {
    // %USERPROFILE%\Documents
    Documents,
 
-   // Documents library definition.
+   // Documents library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::Documents`] and `resolve_windows_library_dirs`.
    // %APPDATA%\Microsoft\Windows\Libraries\Documents.library-ms
    DocumentsLibrary,
 
@@ -132,7 +178,8 @@ pub enum Win32Path {
    // %USERPROFILE%\Music
    Music,
 
-   // Music library definition.
+   // Music library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::Music`] and `resolve_windows_library_dirs`.
    // %APPDATA%\Microsoft\Windows\Libraries\Music.library-ms
    MusicLibrary,
 
@@ -152,7 +199,8 @@ pub enum Win32Path {
    // %USERPROFILE%\Pictures\Slide Shows
    PhotoAlbums,
 
-   // Pictures library definition.
+   // Pictures library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::Pictures`] and `resolve_windows_library_dirs`.
    // %APPDATA%\Microsoft\Windows\Libraries\Pictures.library-ms
    PicturesLibrary,
 
@@ -256,7 +304,8 @@ pub enum Win32Path {
    // %APPDATA%\Microsoft\Windows\Recent
    Recent,
 
-   // Recorded TV library definition.
+   // Recorded TV library definition (.library-ms). For pinned member folders, use
+   // Recorded TV library definition (.library-ms) only — not a [`WindowsLibrary`] member variant.
    // %PUBLIC%\RecordedTV.library-ms
    RecordedTVLibrary,
 
@@ -309,7 +358,8 @@ pub enum Win32Path {
    // %USERPROFILE%\Pictures\Saved Pictures
    SavedPictures,
 
-   // Saved pictures library definition.
+   // Saved pictures library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::SavedPictures`] and `resolve_windows_library_dirs`.
    // %APPDATA%\Microsoft\Windows\Libraries\SavedPictures.library-ms
    SavedPicturesLibrary,
 
@@ -397,7 +447,8 @@ pub enum Win32Path {
    // %USERPROFILE%\Videos
    Videos,
 
-   // Video library definition.
+   // Video library definition (.library-ms). For pinned member folders, use
+   // [`WindowsLibrary::Video`] and `resolve_windows_library_dirs`.
    // %APPDATA%\Microsoft\Windows\Libraries\Videos.library-ms
    VideoLibrary,
 
@@ -413,6 +464,7 @@ impl Display for Win32Path {
          Win32Path::AdminTools => write!(f, "adminTools"),
          Win32Path::ApplicationShortcuts => write!(f, "applicationShortcuts"),
          Win32Path::CameraRoll => write!(f, "cameraRoll"),
+         Win32Path::CameraRollLibrary => write!(f, "cameraRollLibrary"),
          Win32Path::CdBurning => write!(f, "cdBurning"),
          Win32Path::CommonAdminTools => write!(f, "commonAdminTools"),
          Win32Path::CommonOemLinks => write!(f, "commonOemLinks"),

@@ -129,7 +129,7 @@ per-platform methods:
 use fs_resolver::{
    AndroidPath, AndroidPathCollection, CrossPlatformMapping, FsEnvironment,
    IosPath, LinuxPath, MacPath, PathResolver, PlatformMapping, Result, Win32Path,
-   WindowsApplicationDataPath,
+   WindowsApplicationDataPath, WindowsLibrary,
 };
 use std::path::PathBuf;
 
@@ -158,6 +158,10 @@ fn create_test_resolver(environment: FsEnvironment) -> PathResolver {
       Box::new(|path: &WindowsApplicationDataPath| -> Result<PathBuf> {
          Ok(PathBuf::from(format!("windowsApplicationData/{}", path)))
       });
+   let resolve_windows_library_dirs =
+      Box::new(|_library: &WindowsLibrary| -> Result<Vec<PathBuf>> {
+         Ok(vec![PathBuf::from("windowsLibraryDirs")])
+      });
 
    PathResolver::new_for_test(
       environment,
@@ -168,6 +172,7 @@ fn create_test_resolver(environment: FsEnvironment) -> PathResolver {
       resolve_mac,
       resolve_win32,
       resolve_windows_application_data,
+      resolve_windows_library_dirs,
    )
 }
 
@@ -284,7 +289,8 @@ idioms while sharing the same IPC commands underneath.
 methods for both cross-platform mapping resolution (`resolve_mapping`) and
 direct per-platform resolution (`resolve_ios`, `resolve_mac`, `resolve_linux`,
 `resolve_android`, `resolve_win32`, `resolve_windows_application_data`,
-`resolve_android_path_collection`, `environment`). Callers construct it once
+`resolve_windows_library_dirs`, `resolve_android_path_collection`,
+`environment`). Callers construct it once
 with `PathResolver::new(bundle_identifier)?` (typically Tauri's
 `config().identifier`) and use that instance for all resolution.
 
@@ -294,6 +300,7 @@ resolver state. See [Apple backup exclusion](#apple-backup-exclusion).
 
 **TypeScript** exposes individual async functions (`resolveIosPath`,
 `resolveMacPath`, `resolveLinuxPath`, `resolveAndroidPath`, `resolveWin32Path`,
+`resolveWindowsLibraryDirs`,
 `resolveWindowsApplicationDataPath`, `resolveAndroidPathCollection`,
 `getFsEnvironment`) that each call a corresponding Tauri IPC command, plus a
 `resolveMapping()` helper and `CrossPlatformMapping` type for cross-platform
@@ -598,6 +605,16 @@ const documents = await resolveWin32Path(Win32Path.Documents);
 ```
 
 ```typescript
+// Windows library member folders (not the .library-ms definition path)
+import { resolveWindowsLibraryDirs, WindowsLibrary } from 'tauri-plugin-fs-resolver';
+
+const documentLibraryDirs = await resolveWindowsLibraryDirs(WindowsLibrary.Documents);
+```
+
+See [Windows shell libraries](#windows-shell-libraries) for when to use this vs
+`Win32Path`.
+
+```typescript
 // Windows (packaged)
 import {
    resolveWindowsApplicationDataPath,
@@ -624,7 +641,7 @@ that the current environment matches the target platform and returns
 ```rust
 use fs_resolver::{
    PathResolver, AndroidPath, IosPath, LinuxPath, MacPath, Win32Path,
-   WindowsApplicationDataPath,
+   WindowsApplicationDataPath, WindowsLibrary,
 };
 
 let resolver = PathResolver::new("com.example.app".to_string())?;
@@ -650,6 +667,10 @@ let caches = resolver.resolve_mac(&MacPath::CachesDirectoryForCurrentApp)?;
 // Windows (unpackaged)
 let app_data = resolver.resolve_win32(&Win32Path::RoamingAppDataForCurrentApp)?;
 let documents = resolver.resolve_win32(&Win32Path::Documents)?;
+
+// Windows shell library member folders (win32 or winpackaged)
+let document_library_dirs =
+   resolver.resolve_windows_library_dirs(&WindowsLibrary::Documents)?;
 
 // Windows (packaged)
 let local_folder = resolver.resolve_windows_application_data(
@@ -739,7 +760,7 @@ permission first.
 | macOS    | Native calls via `objc2` and `objc2-foundation`                  |
 | iOS      | Native calls via `objc2` and `objc2-foundation`                  |
 | Linux    | Rust `std::env` and XDG conventions                              |
-| Windows  | `SHGetKnownFolderPath` (Win32) or WinRT `ApplicationData` (packaged) |
+| Windows  | `SHGetKnownFolderPath` (Win32), WinRT `ApplicationData` (packaged), or `IShellLibrary` (shell library member folders) |
 | Android  | JNI bridge to Kotlin via Tauri `PluginHandle`                    |
 
 On all platforms except Android, paths are resolved directly in Rust
@@ -813,7 +834,83 @@ ApplicationData (typical) or a Win32 known folder:
    * Rust: `WinPackagedPathMapping::ApplicationDataPath(...)` or
      `WinPackagedPathMapping::Win32Path(...)`
 
+#### Windows shell libraries
+
+Windows exposes three related but different concepts for “Documents”, “Music”, and
+similar libraries. Pick the API that matches what you need:
+
+| Goal | API | Returns |
+| ---- | --- | ------- |
+| Default single folder (e.g. user Documents) | `Win32Path::Documents` via `resolve_win32` / `resolveWin32Path` | One path |
+| Library **definition** (`.library-ms` file) | `Win32Path::DocumentsLibrary` (and other `*Library` variants) | One path |
+| **Pinned member folders** in the library (Explorer aggregation) | `WindowsLibrary::Documents` via `resolve_windows_library_dirs` / `resolveWindowsLibraryDirs` | Zero or more paths, or errors (see below) |
+
+**Semantics:**
+
+   * Member paths are returned in Explorer order as absolute filesystem paths.
+   * Resolution uses `IShellLibrary::GetFolders` with `LFF_FORCEFILESYSTEM`, so
+     only filesystem-backed locations are included (network-only or other non-filesystem
+     entries are omitted).
+   * Allowed on both `win32` and `winpackaged` environments (same as `resolve_win32`).
+   * **`CrossPlatformMapping` / `resolveMapping` do not cover shell libraries.** Call
+     `resolve_windows_library_dirs` or `resolveWindowsLibraryDirs` explicitly when you
+     need library aggregation.
+
+**Result matrix** (`resolve_windows_library_dirs` / `resolveWindowsLibraryDirs`):
+
+| Result | Meaning | Typical caller action |
+| ------ | ------- | --------------------- |
+| `Ok(paths)` with one or more entries | Library exists; pinned member folders found | Use paths as configured by the user in Explorer |
+| `Ok([])` | Library **exists** but the user removed every pinned location | Do not treat as “missing library”; use a fallback folder or prompt |
+| `Err(MissingWindowsLibrary)` | Library **definition** absent (deleted in Explorer, never created, etc.) | Different from empty pins — hide feature or use `Win32Path::Documents` / other default |
+| `Err(WindowsShellLibraryResolutionFailed)` | COM or shell API failure | Log / support; distinct from `InvalidPath` and from missing library |
+
+Empty `[]` vs missing library: returning `[]` for a missing library would conflate
+“user cleared all locations” with “library does not exist,” so missing definitions
+surface as `MissingWindowsLibrary` instead.
+
+**`WindowsLibrary` variants:** Documents, Music, Pictures, Camera Roll, Saved Pictures,
+and Videos. Legacy Recorded TV is not a `WindowsLibrary` variant; use
+`Win32Path::RecordedTVLibrary` only when you need the `.library-ms` definition path.
+
+TypeScript receives errors as rejected promises whose message matches the Rust
+`Error` display string.
+
+Implementation uses COM (`IShellLibrary`) in
+[`crates/fs-resolver/src/windows_resolve.rs`](crates/fs-resolver/src/windows_resolve.rs).
+The example app exposes a **WinLibrary** mode to try each `WindowsLibrary` variant:
+[`examples/tauri-app/src/App.vue`](examples/tauri-app/src/App.vue) (`npm run example:dev`
+on Windows).
+
 **TypeScript**
+
+```typescript
+import {
+   resolveWindowsLibraryDirs,
+   resolveWin32Path,
+   WindowsLibrary,
+   Win32Path,
+} from 'tauri-plugin-fs-resolver';
+
+// Member folders pinned in the Documents library
+const memberDirs = await resolveWindowsLibraryDirs(WindowsLibrary.Documents);
+
+// .library-ms definition path (usually not what you want for member folders)
+const definitionPath = await resolveWin32Path(Win32Path.DocumentsLibrary);
+```
+
+**Rust**
+
+```rust
+use fs_resolver::{PathResolver, WindowsLibrary, Win32Path};
+
+let resolver = PathResolver::new("com.example.app".to_string())?;
+
+let member_dirs = resolver.resolve_windows_library_dirs(&WindowsLibrary::Documents)?;
+let definition = resolver.resolve_win32(&Win32Path::DocumentsLibrary)?;
+```
+
+**TypeScript** (unpackaged / packaged known folders)
 
 ```typescript
 import {
