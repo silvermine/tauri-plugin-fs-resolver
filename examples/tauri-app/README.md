@@ -7,6 +7,11 @@ each one to its absolute path when tapped/clicked.
 On Android, a radio toggle switches between single-path directories
 (e.g. `dataDir`) and collection directories (e.g. `externalCacheDirs`).
 
+On Windows, choose **WinLibrary** to exercise `resolveWindowsLibraryDirs` for each
+`WindowsLibrary` variant. Success shows pinned folder paths (or `(empty)` when the
+library exists but has no members). Failures show the error message (for example when
+the library definition is missing).
+
 ## Running
 
 From the **repository root**:

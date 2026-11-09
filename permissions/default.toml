@@ -7,6 +7,7 @@ permissions = [
     "allow-resolve-linux-path",
     "allow-resolve-win32-path",
     "allow-resolve-windows-application-data-path",
+    "allow-resolve-windows-library-dirs",
     "allow-resolve-android-path",
     "allow-resolve-android-path-collection",
 ]

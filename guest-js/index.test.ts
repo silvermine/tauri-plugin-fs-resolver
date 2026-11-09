@@ -10,6 +10,7 @@ import {
    resolveLinuxPath,
    resolveMacPath,
    resolveWin32Path,
+   resolveWindowsLibraryDirs,
 } from './index';
 import {
    AndroidPath,
@@ -20,6 +21,7 @@ import {
    MacPath,
    Win32Path,
    WindowsApplicationDataPath,
+   WindowsLibrary,
 } from './types';
 import { clearFsEnvironmentCache, resolveWindowsApplicationDataPath } from './platform-paths';
 
@@ -29,7 +31,8 @@ const resolvedAndroidPath = 'android_path',
       resolvedLinuxPath = 'linux_path',
       resolvedMacPath = 'mac_path',
       resolvedWin32Path = 'win32_path',
-      resolvedWindowsApplicationDataPath = 'windows_application_data_path';
+      resolvedWindowsApplicationDataPath = 'windows_application_data_path',
+      resolvedWindowsLibraryDirs = [ 'C:\\Users\\me\\Documents' ];
 
 let lastCmd = '',
     lastArgs: Record<string, unknown> = {},
@@ -65,6 +68,9 @@ beforeEach(() => {
       }
       if (cmd === 'plugin:fs-resolver|resolve_windows_application_data_path') {
          return resolvedWindowsApplicationDataPath;
+      }
+      if (cmd === 'plugin:fs-resolver|resolve_windows_library_dirs') {
+         return resolvedWindowsLibraryDirs;
       }
       if (cmd === 'plugin:fs-resolver|get_fs_environment') {
          return mockFsEnvironment;
@@ -175,6 +181,24 @@ describe('fs-resolver actions map to Tauri commands', () => {
       expect(lastArgs.path).toEqual(WindowsApplicationDataPath.LocalFolder);
       expect(resolvedPath).toBe(resolvedWindowsApplicationDataPath);
    });
+
+   it('resolveWindowsLibraryDirs — sends library, returns resolved paths', async () => {
+      setMockFsEnvironment('win32');
+      const resolvedPaths = await resolveWindowsLibraryDirs(WindowsLibrary.Documents);
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_library_dirs');
+      expect(lastArgs.library).toEqual(WindowsLibrary.Documents);
+      expect(resolvedPaths).toBe(resolvedWindowsLibraryDirs);
+   });
+
+   it('resolveWindowsLibraryDirs when in winpackaged environment — sends library, returns resolved paths', async () => {
+      setMockFsEnvironment('winpackaged');
+      const resolvedPaths = await resolveWindowsLibraryDirs(WindowsLibrary.Documents);
+
+      expect(lastCmd).toBe('plugin:fs-resolver|resolve_windows_library_dirs');
+      expect(lastArgs.library).toEqual(WindowsLibrary.Documents);
+      expect(resolvedPaths).toBe(resolvedWindowsLibraryDirs);
+   });
 });
 
 describe('fs-resolver errors when calling from incorrect platform', () => {
@@ -282,6 +306,20 @@ describe('fs-resolver errors when calling from incorrect platform', () => {
 
       setMockFsEnvironment('macos');
       await expect(resolveWin32Path(Win32Path.LocalAppData)).rejects.toThrow(win32ErrorMsg);
+   });
+
+   it('resolveWindowsLibraryDirs — throws error if not on Win32 or WinPackaged', async () => {
+      setMockFsEnvironment('android');
+      await expect(resolveWindowsLibraryDirs(WindowsLibrary.Documents)).rejects.toThrow(win32ErrorMsg);
+
+      setMockFsEnvironment('ios');
+      await expect(resolveWindowsLibraryDirs(WindowsLibrary.Documents)).rejects.toThrow(win32ErrorMsg);
+
+      setMockFsEnvironment('linux');
+      await expect(resolveWindowsLibraryDirs(WindowsLibrary.Documents)).rejects.toThrow(win32ErrorMsg);
+
+      setMockFsEnvironment('macos');
+      await expect(resolveWindowsLibraryDirs(WindowsLibrary.Documents)).rejects.toThrow(win32ErrorMsg);
    });
 
    it('resolveWindowsApplicationDataPath — throws error if not on WinPackaged', async () => {

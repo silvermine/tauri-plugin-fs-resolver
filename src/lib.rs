@@ -47,6 +47,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
          commands::resolve_mac_path,
          commands::resolve_win32_path,
          commands::resolve_windows_application_data_path,
+         commands::resolve_windows_library_dirs,
       ])
       .build()
 }

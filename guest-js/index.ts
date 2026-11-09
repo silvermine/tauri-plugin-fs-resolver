@@ -7,6 +7,7 @@ export {
    resolveMacPath,
    resolveWin32Path,
    resolveWindowsApplicationDataPath,
+   resolveWindowsLibraryDirs,
 } from './platform-paths';
 
 export {
@@ -25,4 +26,5 @@ export {
    MacPath,
    Win32Path,
    WindowsApplicationDataPath,
+   WindowsLibrary,
 } from './types';

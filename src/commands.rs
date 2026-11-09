@@ -1,6 +1,6 @@
 use fs_resolver::{
    AndroidPath, AndroidPathCollection, FsEnvironment, IosPath, LinuxPath, MacPath, PathResolver,
-   Result, Win32Path, WindowsApplicationDataPath,
+   Result, Win32Path, WindowsApplicationDataPath, WindowsLibrary,
 };
 use std::path::PathBuf;
 use tauri::State;
@@ -59,6 +59,14 @@ pub(crate) async fn resolve_windows_application_data_path(
    path: WindowsApplicationDataPath,
 ) -> Result<PathBuf> {
    resolver.resolve_windows_application_data(&path)
+}
+
+#[tauri::command]
+pub(crate) async fn resolve_windows_library_dirs(
+   resolver: State<'_, PathResolver>,
+   library: WindowsLibrary,
+) -> Result<Vec<PathBuf>> {
+   resolver.resolve_windows_library_dirs(&library)
 }
 
 #[tauri::command]

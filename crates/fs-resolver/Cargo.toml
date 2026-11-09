@@ -30,7 +30,7 @@ windows-sys = {
     ] 
 }
 
-# WinRT: package ApplicationData folders (Current + CreateForPackageFamily fallback).
+# WinRT ApplicationData + Win32 IShellLibrary (library member folder paths).
 windows = { 
     version = "0.62.2", 
     features = [
@@ -42,7 +42,12 @@ windows = {
         # ApplicationDataManager::CreateForPackageFamily
         "Management_Core",
         # Package::Current / Id / FamilyName
-        "ApplicationModel", 
+        "ApplicationModel",
+        # IShellLibrary::GetFolders, SHLoadLibraryFromKnownFolder
+        "Win32_UI_Shell",
+        # CoInitializeEx / CoUninitialize / STGM_READ; RPC_E_CHANGED_MODE
+        "Win32_System_Com",
+        "Win32_Foundation",
     ] 
 }
 

@@ -3,6 +3,7 @@ use crate::ios_paths::IosPath;
 use crate::path_mapping::{
    WinPackagedPathMapping, validate_bundle_identifier, validate_relative_path,
 };
+use crate::windows_paths::WindowsLibrary;
 use crate::{
    AndroidPathCollection, CrossPlatformMapping, Error, LinuxPath, Win32Path,
    WindowsApplicationDataPath,
@@ -23,6 +24,8 @@ type MacPathResolver = Box<dyn Fn(&MacPath) -> Result<PathBuf> + Send + Sync>;
 type Win32PathResolver = Box<dyn Fn(&Win32Path) -> Result<PathBuf> + Send + Sync>;
 type WindowsApplicationDataPathResolver =
    Box<dyn Fn(&WindowsApplicationDataPath) -> Result<PathBuf> + Send + Sync>;
+type WindowsLibraryDirsResolver =
+   Box<dyn Fn(&WindowsLibrary) -> Result<Vec<PathBuf>> + Send + Sync>;
 
 pub struct PathResolver {
    environment: FsEnvironment,
@@ -33,6 +36,7 @@ pub struct PathResolver {
    resolve_mac: MacPathResolver,
    resolve_win32: Win32PathResolver,
    resolve_windows_application_data: WindowsApplicationDataPathResolver,
+   resolve_windows_library_dirs: WindowsLibraryDirsResolver,
 }
 
 impl PathResolver {
@@ -66,6 +70,11 @@ impl PathResolver {
                crate::windows_resolve::resolve_win_packaged_path(path)
             },
          ),
+         resolve_windows_library_dirs: Box::new(
+            move |path: &WindowsLibrary| -> Result<Vec<PathBuf>> {
+               crate::windows_resolve::resolve_dirs_in_windows_library(path)
+            },
+         ),
       })
    }
 
@@ -90,6 +99,7 @@ impl PathResolver {
       resolve_mac: MacPathResolver,
       resolve_win32: Win32PathResolver,
       resolve_windows_application_data: WindowsApplicationDataPathResolver,
+      resolve_windows_library_dirs: WindowsLibraryDirsResolver,
    ) -> Self {
       Self {
          environment,
@@ -100,6 +110,7 @@ impl PathResolver {
          resolve_mac,
          resolve_win32,
          resolve_windows_application_data,
+         resolve_windows_library_dirs,
       }
    }
 
@@ -236,6 +247,31 @@ impl PathResolver {
       (self.resolve_windows_application_data)(path)
    }
 
+   /// Filesystem paths of folders pinned in a Windows shell library ([`WindowsLibrary`]).
+   ///
+   /// Unlike [`Win32Path`] `*Library` variants (`.library-ms` definition paths via
+   /// `SHGetKnownFolderPath`), this uses the Shell Library API (`IShellLibrary`) and
+   /// reflects the user's configured library locations.
+   ///
+   /// # Returns
+   ///
+   /// * `Ok(vec)` — member folder paths in Explorer order (may be **empty** if the user
+   ///   removed every pinned location; the library still exists).
+   ///
+   /// # Errors
+   ///
+   /// * [`Error::MissingWindowsLibrary`] — the library definition is absent (not the same
+   ///   as an empty member list).
+   /// * [`Error::WindowsShellLibraryResolutionFailed`] — COM or shell API failure.
+   pub fn resolve_windows_library_dirs(&self, library: &WindowsLibrary) -> Result<Vec<PathBuf>> {
+      Self::check_environment(
+         library,
+         &[&FsEnvironment::Win32, &FsEnvironment::WinPackaged],
+         &self.environment,
+      )?;
+      (self.resolve_windows_library_dirs)(library)
+   }
+
    fn check_environment(
       path_string: &dyn Display,
       expected: &[&FsEnvironment],
@@ -280,6 +316,7 @@ mod tests {
    use crate::Error;
    use crate::PlatformMapping;
    use crate::Win32Path;
+   use crate::windows_paths::WindowsLibrary;
    use rstest::rstest;
 
    // Fails to compile when FsEnvironment gets a new variant, as a reminder to add a case
@@ -512,6 +549,39 @@ mod tests {
             path: WindowsApplicationDataPath::LocalFolder.to_string(),
             current_os: environment.to_string(),
             expected_os: "winpackaged".to_string(),
+         }
+      );
+   }
+
+   #[rstest]
+   #[case::win32(FsEnvironment::Win32)]
+   #[case::win_packaged(FsEnvironment::WinPackaged)]
+   fn resolve_windows_library_dirs_accepts_windows_environments(
+      #[case] environment: FsEnvironment,
+   ) {
+      let resolver = create_test_resolver(environment);
+      let result = resolver.resolve_windows_library_dirs(&WindowsLibrary::Documents);
+
+      assert_eq!(result.unwrap(), vec![PathBuf::from("windowsLibraryDirs")]);
+   }
+
+   #[rstest]
+   #[case::android(FsEnvironment::Android)]
+   #[case::ios(FsEnvironment::Ios)]
+   #[case::linux(FsEnvironment::Linux)]
+   #[case::macos(FsEnvironment::Macos)]
+   fn resolve_windows_library_dirs_rejects_non_windows_environments(
+      #[case] environment: FsEnvironment,
+   ) {
+      let resolver = create_test_resolver(environment.clone());
+      let result = resolver.resolve_windows_library_dirs(&WindowsLibrary::Documents);
+
+      assert_eq!(
+         result.unwrap_err(),
+         Error::IncorrectOS {
+            path: WindowsLibrary::Documents.to_string(),
+            current_os: environment.to_string(),
+            expected_os: ["win32", "winpackaged"].join(", "),
          }
       );
    }
@@ -767,6 +837,11 @@ mod tests {
             Ok(PathBuf::from(format!("windowsApplicationData/{}", path)))
          });
 
+      let resolve_windows_library_dirs =
+         Box::new(|_path: &WindowsLibrary| -> Result<Vec<PathBuf>> {
+            Ok(vec![PathBuf::from("windowsLibraryDirs")])
+         });
+
       PathResolver::new_for_test(
          environment,
          resolve_android,
@@ -776,6 +851,7 @@ mod tests {
          resolve_mac,
          resolve_win32,
          resolve_windows_application_data,
+         resolve_windows_library_dirs,
       )
    }
 }

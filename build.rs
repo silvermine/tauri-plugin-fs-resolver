@@ -7,6 +7,7 @@ const COMMANDS: &[&str] = &[
    "resolve_mac_path",
    "resolve_win32_path",
    "resolve_windows_application_data_path",
+   "resolve_windows_library_dirs",
 ];
 
 fn main() {

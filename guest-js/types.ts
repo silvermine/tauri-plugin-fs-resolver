@@ -503,6 +503,11 @@ export enum Win32Path {
     */
    CameraRoll = 'cameraRoll',
 
+   /** Camera Roll library definition (`.library-ms`). For pinned member folders, use
+    * {@link WindowsLibrary.CameraRoll} and {@link resolveWindowsLibraryDirs}.
+    */
+   CameraRollLibrary = 'cameraRollLibrary',
+
    /** Staging area for burning CDs/DVDs.
     * `%LOCALAPPDATA%\Microsoft\Windows\Burn\Burn`
     */
@@ -982,6 +987,38 @@ export enum Win32Path {
     * `%windir%`
     */
    Windows = 'windows',
+}
+
+/**
+ * Windows shell libraries (Documents, Music, Pictures, etc.).
+ *
+ * Use {@link resolveWindowsLibraryDirs} to resolve **member folder paths** pinned in
+ * each library. This is not the same as {@link Win32Path} `*Library` variants, which
+ * resolve the library **definition** (`.library-ms` via known folder ID).
+ *
+ * Returns an empty array when the library exists but has no pinned folders. Rejects with
+ * a message containing `Windows shell library not found` when the library definition is
+ * missing (distinct from empty). See the plugin README for the full result matrix.
+ */
+export enum WindowsLibrary {
+
+   /** User Documents library member folders. */
+   Documents = 'documents',
+
+   /** User Music library member folders. */
+   Music = 'music',
+
+   /** User Pictures library member folders. */
+   Pictures = 'pictures',
+
+   /** Camera Roll library member folders (Windows 8.1+). */
+   CameraRoll = 'cameraRoll',
+
+   /** Saved Pictures library member folders. */
+   SavedPictures = 'savedPictures',
+
+   /** User Videos library member folders. */
+   Video = 'video',
 }
 
 /**

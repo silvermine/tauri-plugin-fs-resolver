@@ -1,8 +1,12 @@
 use crate::Win32Path;
 use crate::WindowsApplicationDataPath;
+use crate::WindowsLibrary;
 use crate::error::Error;
 use crate::error::Result;
 use std::path::PathBuf;
+
+#[cfg(target_os = "windows")]
+use windows::core::HRESULT;
 
 /// Resolves Win32 known-folder paths via SHGetKnownFolderPath.
 ///
@@ -52,6 +56,258 @@ pub(crate) fn resolve_win_packaged_path(path: &WindowsApplicationDataPath) -> Re
    }
 }
 
+/// Returns filesystem paths of folders **pinned in** a Windows shell library (Documents,
+/// Music, Pictures, etc.).
+///
+/// This is not the same as [`Win32Path`] `*Library` variants, which resolve the library
+/// **definition** (the `.library-ms` file via `SHGetKnownFolderPath`). Libraries are
+/// virtual aggregations; member paths come from the Shell Library API (`IShellLibrary`).
+///
+/// # Returns
+///
+/// * `Ok(paths)` — pinned member folders (may be empty if the user removed every location).
+/// * `Err(MissingWindowsLibrary)` — the library definition is absent (user deleted it, etc.).
+/// * `Err(WindowsShellLibraryResolutionFailed)` — COM/shell failure (not a missing library).
+///
+/// See: <https://learn.microsoft.com/en-us/windows/win32/shell/library-be-library-aware>
+pub(crate) fn resolve_dirs_in_windows_library(library: &WindowsLibrary) -> Result<Vec<PathBuf>> {
+   #[cfg(target_os = "windows")]
+   {
+      library_filesystem_dirs(library)
+   }
+
+   #[cfg(not(target_os = "windows"))]
+   {
+      Err(Error::IncorrectOS {
+         path: format!("{library:?}"),
+         current_os: std::env::consts::OS.to_string(),
+         expected_os: "windows".to_string(),
+      })
+   }
+}
+
+/// Maps [`WindowsLibrary`] to the shell library `KNOWNFOLDERID`.
+#[cfg(target_os = "windows")]
+fn known_folder_id_for_library(library: WindowsLibrary) -> windows::core::GUID {
+   use windows::Win32::UI::Shell::{
+      FOLDERID_CameraRollLibrary, FOLDERID_DocumentsLibrary, FOLDERID_MusicLibrary,
+      FOLDERID_PicturesLibrary, FOLDERID_SavedPicturesLibrary, FOLDERID_VideosLibrary,
+   };
+
+   match library {
+      WindowsLibrary::Documents => FOLDERID_DocumentsLibrary,
+      WindowsLibrary::Music => FOLDERID_MusicLibrary,
+      WindowsLibrary::Pictures => FOLDERID_PicturesLibrary,
+      WindowsLibrary::CameraRoll => FOLDERID_CameraRollLibrary,
+      WindowsLibrary::SavedPictures => FOLDERID_SavedPicturesLibrary,
+      WindowsLibrary::Video => FOLDERID_VideosLibrary,
+   }
+}
+
+#[cfg(target_os = "windows")]
+fn core_guid_to_sys(g: windows::core::GUID) -> windows_sys::core::GUID {
+   windows_sys::core::GUID {
+      data1: g.data1,
+      data2: g.data2,
+      data3: g.data3,
+      data4: g.data4,
+   }
+}
+
+/// Returns the `KNOWNFOLDERID` for a [`Win32Path`] `*Library` definition variant by routing
+/// through [`known_folder_id_for_library`] (the same table used for [`WindowsLibrary`] member
+/// resolution).
+#[cfg(target_os = "windows")]
+fn known_folder_id_for_win32_library_definition(
+   path: &Win32Path,
+) -> Option<windows_sys::core::GUID> {
+   let library = match path {
+      Win32Path::DocumentsLibrary => WindowsLibrary::Documents,
+      Win32Path::MusicLibrary => WindowsLibrary::Music,
+      Win32Path::PicturesLibrary => WindowsLibrary::Pictures,
+      Win32Path::CameraRollLibrary => WindowsLibrary::CameraRoll,
+      Win32Path::SavedPicturesLibrary => WindowsLibrary::SavedPictures,
+      Win32Path::VideoLibrary => WindowsLibrary::Video,
+      _ => return None,
+   };
+   Some(core_guid_to_sys(known_folder_id_for_library(library)))
+}
+
+// --- Windows shell library: COM interop helpers ---
+
+/// Holds an STA COM apartment for the duration of a library resolution call.
+///
+/// Tauri/WebView2 may already have initialized COM in another apartment; in that case
+/// `CoInitializeEx` returns `RPC_E_CHANGED_MODE` and we leave the existing mode in place.
+#[cfg(target_os = "windows")]
+struct ComApartment {
+   uninit_on_drop: bool,
+}
+
+#[cfg(target_os = "windows")]
+impl ComApartment {
+   fn enter(library: &WindowsLibrary) -> Result<Self> {
+      use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
+      use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+
+      unsafe {
+         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+         if hr.is_ok() {
+            Ok(Self {
+               uninit_on_drop: true,
+            })
+         } else if hr == RPC_E_CHANGED_MODE {
+            Ok(Self {
+               uninit_on_drop: false,
+            })
+         } else {
+            Err(library_resolution_err(
+               library,
+               "CoInitializeEx",
+               windows::core::Error::from_hresult(hr),
+            ))
+         }
+      }
+   }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for ComApartment {
+   fn drop(&mut self) {
+      if self.uninit_on_drop {
+         unsafe {
+            windows::Win32::System::Com::CoUninitialize();
+         }
+      }
+   }
+}
+
+#[cfg(target_os = "windows")]
+fn is_missing_windows_library_hresult(hr: HRESULT) -> bool {
+   use windows::Win32::Foundation::{
+      ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, STG_E_FILENOTFOUND,
+   };
+
+   hr == STG_E_FILENOTFOUND
+      || hr == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0)
+      || hr == HRESULT::from_win32(ERROR_PATH_NOT_FOUND.0)
+}
+
+#[cfg(target_os = "windows")]
+fn library_resolution_err(
+   library: &WindowsLibrary,
+   step: &'static str,
+   err: windows::core::Error,
+) -> Error {
+   Error::WindowsShellLibraryResolutionFailed {
+      library: library.to_string(),
+      step,
+      reason: err.to_string(),
+   }
+}
+
+/// Converts a COM-allocated wide string (`PWSTR`) to `PathBuf` and frees the buffer.
+#[cfg(target_os = "windows")]
+fn pwstr_to_path_buf(psz: windows::core::PWSTR) -> Result<PathBuf> {
+   use std::ffi::OsString;
+   use std::ffi::c_void;
+   use std::os::windows::ffi::OsStringExt;
+
+   use windows_sys::Win32::System::Com::CoTaskMemFree;
+
+   unsafe {
+      let len = windows_sys::Win32::Globalization::lstrlenW(psz.0);
+      if len == 0 {
+         CoTaskMemFree(psz.0 as *const c_void);
+         return Ok(PathBuf::new());
+      }
+      let slice = std::slice::from_raw_parts(psz.0, len as usize);
+      let path = PathBuf::from(OsString::from_wide(slice));
+      CoTaskMemFree(psz.0 as *const c_void);
+      Ok(path)
+   }
+}
+
+// --- Windows shell library: business logic ---
+
+/// Orchestrates library member-path resolution: COM init, load library, enumerate folders.
+#[cfg(target_os = "windows")]
+fn library_filesystem_dirs(library: &WindowsLibrary) -> Result<Vec<PathBuf>> {
+   use windows::Win32::UI::Shell::LFF_FORCEFILESYSTEM;
+
+   let _com = ComApartment::enter(library)?;
+   let known_folder = known_folder_id_for_library(*library);
+   let shell_library = load_shell_library_from_known_folder(library, &known_folder)?;
+   let folders = unsafe {
+      shell_library
+         .GetFolders(LFF_FORCEFILESYSTEM)
+         .map_err(|e| library_resolution_err(library, "IShellLibrary::GetFolders", e))?
+   };
+   shell_item_array_filesystem_paths(library, &folders)
+}
+
+/// Creates `IShellLibrary` and loads the library described by `known_folder`.
+#[cfg(target_os = "windows")]
+fn load_shell_library_from_known_folder(
+   library: &WindowsLibrary,
+   known_folder: &windows::core::GUID,
+) -> Result<windows::Win32::UI::Shell::IShellLibrary> {
+   use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, STGM_READ};
+   use windows::Win32::UI::Shell::{IShellLibrary, ShellLibrary};
+
+   unsafe {
+      let shell_library: IShellLibrary =
+         CoCreateInstance(&ShellLibrary, None, CLSCTX_INPROC_SERVER).map_err(|e| {
+            library_resolution_err(library, "CoCreateInstance(CLSID_ShellLibrary)", e)
+         })?;
+      shell_library
+         .LoadLibraryFromKnownFolder(known_folder, STGM_READ.0)
+         .map_err(|e| {
+            if is_missing_windows_library_hresult(e.code()) {
+               Error::MissingWindowsLibrary {
+                  library: library.to_string(),
+               }
+            } else {
+               library_resolution_err(library, "IShellLibrary::LoadLibraryFromKnownFolder", e)
+            }
+         })?;
+      Ok(shell_library)
+   }
+}
+
+/// Maps each shell item in `folders` to a filesystem path (`SIGDN_FILESYSPATH`).
+#[cfg(target_os = "windows")]
+fn shell_item_array_filesystem_paths(
+   library: &WindowsLibrary,
+   folders: &windows::Win32::UI::Shell::IShellItemArray,
+) -> Result<Vec<PathBuf>> {
+   use windows::Win32::UI::Shell::SIGDN_FILESYSPATH;
+
+   unsafe {
+      let count = folders
+         .GetCount()
+         .map_err(|e| library_resolution_err(library, "IShellItemArray::GetCount", e))?;
+
+      let mut paths = Vec::with_capacity(count as usize);
+      for i in 0..count {
+         let item = folders
+            .GetItemAt(i)
+            .map_err(|e| library_resolution_err(library, "IShellItemArray::GetItemAt", e))?;
+
+         let psz = item
+            .GetDisplayName(SIGDN_FILESYSPATH)
+            .map_err(|e| library_resolution_err(library, "IShellItem::GetDisplayName", e))?;
+
+         let path = pwstr_to_path_buf(psz)?;
+         if !path.as_os_str().is_empty() {
+            paths.push(path);
+         }
+      }
+
+      Ok(paths)
+   }
+}
+
 #[cfg(target_os = "windows")]
 fn resolve_win_packaged_path_inner(path: &WindowsApplicationDataPath) -> Result<PathBuf> {
    use std::ffi::OsString;
@@ -93,12 +349,11 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       FOLDERID_CDBurning, FOLDERID_CameraRoll, FOLDERID_CommonAdminTools, FOLDERID_CommonOEMLinks,
       FOLDERID_CommonPrograms, FOLDERID_CommonStartMenu, FOLDERID_CommonStartup,
       FOLDERID_CommonTemplates, FOLDERID_Contacts, FOLDERID_Cookies, FOLDERID_Desktop,
-      FOLDERID_DeviceMetadataStore, FOLDERID_Documents, FOLDERID_DocumentsLibrary,
-      FOLDERID_Downloads, FOLDERID_Favorites, FOLDERID_Fonts, FOLDERID_GameTasks, FOLDERID_History,
-      FOLDERID_ImplicitAppShortcuts, FOLDERID_InternetCache, FOLDERID_Libraries, FOLDERID_Links,
-      FOLDERID_LocalAppData, FOLDERID_LocalAppDataLow, FOLDERID_LocalizedResourcesDir,
-      FOLDERID_Music, FOLDERID_MusicLibrary, FOLDERID_NetHood, FOLDERID_Objects3D,
-      FOLDERID_OriginalImages, FOLDERID_PhotoAlbums, FOLDERID_Pictures, FOLDERID_PicturesLibrary,
+      FOLDERID_DeviceMetadataStore, FOLDERID_Documents, FOLDERID_Downloads, FOLDERID_Favorites,
+      FOLDERID_Fonts, FOLDERID_GameTasks, FOLDERID_History, FOLDERID_ImplicitAppShortcuts,
+      FOLDERID_InternetCache, FOLDERID_Libraries, FOLDERID_Links, FOLDERID_LocalAppData,
+      FOLDERID_LocalAppDataLow, FOLDERID_LocalizedResourcesDir, FOLDERID_Music, FOLDERID_NetHood,
+      FOLDERID_Objects3D, FOLDERID_OriginalImages, FOLDERID_PhotoAlbums, FOLDERID_Pictures,
       FOLDERID_Playlists, FOLDERID_PrintHood, FOLDERID_Profile, FOLDERID_ProgramData,
       FOLDERID_ProgramFiles, FOLDERID_ProgramFilesCommon, FOLDERID_ProgramFilesCommonX64,
       FOLDERID_ProgramFilesCommonX86, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86,
@@ -115,10 +370,30 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       FOLDERID_SkyDriveCameraRoll, FOLDERID_SkyDriveDocuments, FOLDERID_SkyDrivePictures,
       FOLDERID_StartMenu, FOLDERID_Startup, FOLDERID_System, FOLDERID_SystemX86,
       FOLDERID_Templates, FOLDERID_UserPinned, FOLDERID_UserProfiles, FOLDERID_UserProgramFiles,
-      FOLDERID_UserProgramFilesCommon, FOLDERID_Videos, FOLDERID_VideosLibrary, FOLDERID_Windows,
-      KF_FLAG_DONT_VERIFY, SHGetKnownFolderPath,
+      FOLDERID_UserProgramFilesCommon, FOLDERID_Videos, FOLDERID_Windows, KF_FLAG_DONT_VERIFY,
+      SHGetKnownFolderPath,
    };
    use windows_sys::core::GUID;
+
+   /// Resolves a [`Win32Path`] `*Library` variant (the `.library-ms` definition path) via
+   /// `SHGetKnownFolderPath`, using the shared library GUID mapping in
+   /// [`known_folder_id_for_library`].
+   ///
+   /// Shell libraries are identified by one `KNOWNFOLDERID` whether you resolve the
+   /// definition file (`DocumentsLibrary`, …) or pinned member folders (`WindowsLibrary`,
+   /// `IShellLibrary`). This helper keeps those GUIDs in a single place.
+   ///
+   /// Without it, each `*Library` arm in the match below would call `known_folder` with its
+   /// own `FOLDERID_*` import from `windows_sys`, duplicating the six IDs already maintained
+   /// for `resolve_dirs_in_windows_library` — and a fix on one side (e.g. `SavedPictures` or
+   /// `CameraRollLibrary`) could be missed on the other. `RecordedTVLibrary` is intentionally
+   /// excluded (no [`WindowsLibrary`] counterpart) and still uses `FOLDERID_RecordedTVLibrary`
+   /// directly.
+   fn known_folder_from_win32_library_definition(path: &Win32Path) -> Result<PathBuf> {
+      let folder_id = known_folder_id_for_win32_library_definition(path)
+         .ok_or_else(|| Error::InvalidPath(format!("Not a library definition path: {path}")))?;
+      known_folder(&folder_id)
+   }
 
    fn known_folder(folder_id: &GUID) -> Result<PathBuf> {
       unsafe {
@@ -152,6 +427,7 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       Win32Path::AdminTools => known_folder(&FOLDERID_AdminTools),
       Win32Path::ApplicationShortcuts => known_folder(&FOLDERID_ApplicationShortcuts),
       Win32Path::CameraRoll => known_folder(&FOLDERID_CameraRoll),
+      Win32Path::CameraRollLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::CdBurning => known_folder(&FOLDERID_CDBurning),
       Win32Path::CommonAdminTools => known_folder(&FOLDERID_CommonAdminTools),
       Win32Path::CommonOemLinks => known_folder(&FOLDERID_CommonOEMLinks),
@@ -164,7 +440,7 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       Win32Path::Desktop => known_folder(&FOLDERID_Desktop),
       Win32Path::DeviceMetadataStore => known_folder(&FOLDERID_DeviceMetadataStore),
       Win32Path::Documents => known_folder(&FOLDERID_Documents),
-      Win32Path::DocumentsLibrary => known_folder(&FOLDERID_DocumentsLibrary),
+      Win32Path::DocumentsLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::Downloads => known_folder(&FOLDERID_Downloads),
       Win32Path::Favorites => known_folder(&FOLDERID_Favorites),
       Win32Path::Fonts => known_folder(&FOLDERID_Fonts),
@@ -182,12 +458,12 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       Win32Path::LocalAppDataLow => known_folder(&FOLDERID_LocalAppDataLow),
       Win32Path::LocalizedResourcesDir => known_folder(&FOLDERID_LocalizedResourcesDir),
       Win32Path::Music => known_folder(&FOLDERID_Music),
-      Win32Path::MusicLibrary => known_folder(&FOLDERID_MusicLibrary),
+      Win32Path::MusicLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::NetworkShortcuts => known_folder(&FOLDERID_NetHood),
       Win32Path::Objects3D => known_folder(&FOLDERID_Objects3D),
       Win32Path::OriginalImages => known_folder(&FOLDERID_OriginalImages),
       Win32Path::PhotoAlbums => known_folder(&FOLDERID_PhotoAlbums),
-      Win32Path::PicturesLibrary => known_folder(&FOLDERID_PicturesLibrary),
+      Win32Path::PicturesLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::Pictures => known_folder(&FOLDERID_Pictures),
       Win32Path::Playlists => known_folder(&FOLDERID_Playlists),
       Win32Path::PrintHood => known_folder(&FOLDERID_PrintHood),
@@ -229,7 +505,7 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       Win32Path::SampleVideos => known_folder(&FOLDERID_SampleVideos),
       Win32Path::SavedGames => known_folder(&FOLDERID_SavedGames),
       Win32Path::SavedPictures => known_folder(&FOLDERID_SavedPictures),
-      Win32Path::SavedPicturesLibrary => known_folder(&FOLDERID_SAVED_PICTURES_LIBRARY),
+      Win32Path::SavedPicturesLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::Searches => known_folder(&FOLDERID_SavedSearches),
       Win32Path::Screenshots => known_folder(&FOLDERID_Screenshots),
       Win32Path::SearchHistory => known_folder(&FOLDERID_SearchHistory),
@@ -251,20 +527,10 @@ fn resolve_win32_path_inner(path: &Win32Path, bundle_identifier: &str) -> Result
       Win32Path::UserProgramFiles => known_folder(&FOLDERID_UserProgramFiles),
       Win32Path::UserProgramFilesCommon => known_folder(&FOLDERID_UserProgramFilesCommon),
       Win32Path::Videos => known_folder(&FOLDERID_Videos),
-      Win32Path::VideoLibrary => known_folder(&FOLDERID_VideosLibrary),
+      Win32Path::VideoLibrary => known_folder_from_win32_library_definition(path),
       Win32Path::Windows => known_folder(&FOLDERID_Windows),
    }
 }
-
-// FOLDERID_SavedPicturesLibrary is not exported by windows-sys.
-// GUID from: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
-#[cfg(target_os = "windows")]
-const FOLDERID_SAVED_PICTURES_LIBRARY: windows_sys::core::GUID = windows_sys::core::GUID {
-   data1: 0xE25B5812,
-   data2: 0xBE88,
-   data3: 0x4BD9,
-   data4: [0x94, 0xB0, 0x29, 0x23, 0x34, 0x77, 0xB6, 0xC3],
-};
 
 /// Obtains the WinRT [`ApplicationData`](https://learn.microsoft.com/en-us/uwp/api/windows.storage.applicationdata)
 /// instance for the current packaged process.
@@ -376,6 +642,7 @@ fn get_application_data() -> Result<windows::Storage::ApplicationData> {
 mod tests {
 
    use super::*;
+   use crate::Error;
    use rstest::rstest;
 
    const BUNDLE_ID: &str = "com.example.app";
@@ -391,5 +658,35 @@ mod tests {
       let path = resolve_win32_path(&app_path, BUNDLE_ID).unwrap();
 
       assert_eq!(path, base.join(BUNDLE_ID));
+   }
+
+   #[test]
+   fn resolve_documents_library_twice_on_same_thread() {
+      let first = resolve_dirs_in_windows_library(&WindowsLibrary::Documents);
+      let second = resolve_dirs_in_windows_library(&WindowsLibrary::Documents);
+      assert!(first.is_ok(), "first call failed: {first:?}");
+      assert!(second.is_ok(), "second call failed: {second:?}");
+   }
+
+   #[rstest]
+   #[case::documents(WindowsLibrary::Documents)]
+   #[case::music(WindowsLibrary::Music)]
+   #[case::pictures(WindowsLibrary::Pictures)]
+   #[case::camera_roll(WindowsLibrary::CameraRoll)]
+   #[case::saved_pictures(WindowsLibrary::SavedPictures)]
+   #[case::video(WindowsLibrary::Video)]
+   fn resolve_dirs_in_windows_library_returns_ok_or_missing(#[case] library: WindowsLibrary) {
+      match resolve_dirs_in_windows_library(&library) {
+         Ok(paths) => {
+            for path in paths {
+               assert!(
+                  path.is_absolute(),
+                  "expected absolute path for {library}, got {path:?}"
+               );
+            }
+         }
+         Err(Error::MissingWindowsLibrary { .. }) => {}
+         Err(other) => panic!("unexpected error for {library}: {other}"),
+      }
    }
 }
