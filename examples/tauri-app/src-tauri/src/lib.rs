@@ -10,11 +10,11 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-   use fs_resolver::{
+   use std::path::PathBuf;
+   use tauri_plugin_fs_resolver::fs_resolver::{
       AndroidPath, AndroidPathCollection, FsEnvironment, IosPath, LinuxPath, MacPath, PathResolver,
       Result, Win32Path, WindowsApplicationDataPath, WindowsLibrary,
    };
-   use std::path::PathBuf;
 
    // Fails to compile when FsEnvironment gets a new variant, as a reminder to add a test
    // for it below. Nothing checks that the test exists.

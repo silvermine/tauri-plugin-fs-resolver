@@ -8,6 +8,13 @@ mod commands;
 #[cfg(target_os = "android")]
 mod android_resolution;
 
+/// The resolver API used by this plugin, including its managed [`fs_resolver::PathResolver`].
+///
+/// Import resolver types through this re-export to use the same types as the plugin's
+/// managed state without a separate dependency on `fs-resolver`. The re-exported crate's
+/// public API is part of the plugin's public API.
+pub use fs_resolver;
+
 /// Re-exported so a consumer can name the error and return types, rather than falling back
 /// on inference and `to_string()`.
 pub use fs_resolver::{Error, Result};
