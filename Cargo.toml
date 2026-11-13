@@ -9,6 +9,9 @@ rust-version = "1.94.0"
 links = "tauri-plugin-fs-resolver"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 
+[features]
+test-helpers = ["fs-resolver/test-helpers"]
+
 [dependencies]
 fs-resolver = { path = "./crates/fs-resolver" }
 tauri = { version = "2.12.0" }

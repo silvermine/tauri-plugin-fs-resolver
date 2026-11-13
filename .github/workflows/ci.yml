@@ -85,7 +85,7 @@ jobs:
            run: npm run test:ts
 
          - name: Run Rust tests
-           run: cargo test -p fs-resolver --lib
+           run: cargo test --workspace --lib
 
    android-plugin-build:
       name: Android Plugin Build
